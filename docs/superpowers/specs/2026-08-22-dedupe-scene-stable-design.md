@@ -84,6 +84,12 @@ def _should_save_thumbnail(self, frame, now):
 apenas `self._last_saved_thumb = _thumbnail_mini(...)`. Adiciona parâmetro `force=False`: quando
 `force=True`, bypassa `_should_save_thumbnail` e salva sempre (usado pelo `no_motion`).
 
+**Responsabilidade de atualizar o representante:** `_capture_thumbnail` atualiza o representante em
+toda gravação bem-sucedida (inclusive `force`). Além disso, o branch de emissão de evento (seção 3.3)
+chama `_update_repr` no momento em que **decide** emitir (cena mudou), para que o representante acompanhe
+a cena emitida mesmo se o save do thumbnail for pulado pelo portão de intervalo mínimo
+(`THUMBNAIL_INTERVAL_SECONDS`). O branch `no_motion` depende apenas do `force=True` (que já atualiza).
+
 **Efeito:** cena estável → no máximo 1 thumbnail por `EVENT_DEDUP_WINDOW_SECONDS`; cena muda de fato →
 salva imediatamente. Isso elimina as imagens quase-idênticas no `camera_thumbnails`.
 
