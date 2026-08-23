@@ -97,6 +97,10 @@ THUMBNAIL_INTERVAL_SECONDS = float(os.getenv("THUMBNAIL_INTERVAL_SECONDS", "20")
 # 2.5% do frame = ~9.1. 3.0 cobre ruído leve e separa mudança real de cena.
 THUMBNAIL_DIFF_THRESHOLD = float(os.getenv("THUMBNAIL_DIFF_THRESHOLD", "3.0"))
 THUMBNAIL_HISTORY_SIZE = int(os.getenv("THUMBNAIL_HISTORY_SIZE", "30"))
+# Janela de deduplicação por cena estável: uma cena estável é representada
+# por no máximo 1 thumbnail/evento por este período (5–10 min). Após a janela,
+# um refresh é salvo mesmo sem mudança de cena.
+EVENT_DEDUP_WINDOW_SECONDS = float(os.getenv("EVENT_DEDUP_WINDOW_SECONDS", "300"))
 
 CLIP_PRE_SECONDS = float(os.getenv("CLIP_PRE_SECONDS", "10"))
 CLIP_POST_SECONDS = float(os.getenv("CLIP_POST_SECONDS", "10"))

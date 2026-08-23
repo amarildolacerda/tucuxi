@@ -22,6 +22,7 @@ from .config import (
     THUMBNAIL_INTERVAL_SECONDS,
     THUMBNAIL_DIFF_THRESHOLD,
     THUMBNAIL_HISTORY_SIZE,
+    EVENT_DEDUP_WINDOW_SECONDS,
     CLIP_PRE_SECONDS,
     CLIP_POST_SECONDS,
     CLIP_FPS,
@@ -83,6 +84,8 @@ class CameraWorker:
         self._last_thumb_time = None
         self._last_saved_thumb = None
         self._last_saved_thumb_path = None
+        self._repr_frame = None
+        self._repr_time = 0.0
         self._latest_frame = None
         self._latest_frame_time = None
         self.stop_event = threading.Event()
@@ -122,24 +125,56 @@ class CameraWorker:
         return self._latest_frame, self._latest_frame_time
 
     def _should_save_thumbnail(self, frame, now):
-        """Decisão única de captura de thumbnail (evento e history):
-        intervalo mínimo entre capturas + dedup por similaridade com o
-        último thumbnail salvo (cena estática não gera duplicatas)."""
+        """Decisão de captura de thumbnail: intervalo mínimo + dedup por
+        cena estável (representante + janela)."""
         if not should_capture_thumbnail(self._last_thumb_time, now, THUMBNAIL_INTERVAL_SECONDS):
             return False
-        if self._last_saved_thumb is not None and frames_similar(self._last_saved_thumb, frame, THUMBNAIL_DIFF_THRESHOLD):
+        if not self._scene_changed(frame, now):
             return False
         return True
 
-    def _capture_thumbnail(self, storage_frame, event_type, now, keep=THUMBNAIL_HISTORY_SIZE, days=None, event_id=None):
-        """Salva um thumbnail com dedup por similaridade.
+    def _scene_changed(self, frame, now):
+        """True se a cena deve ser tratada como nova (salvar/suprimir).
+
+        - sem representante: sempre nova;
+        - janela expirada: refresh obrigatório;
+        - frames_similar falha: cena mudou de fato.
+        """
+        if self._repr_frame is None:
+            return True
+        if now - self._repr_time >= EVENT_DEDUP_WINDOW_SECONDS:
+            return True
+        return not frames_similar(self._repr_frame, frame, THUMBNAIL_DIFF_THRESHOLD)
+
+    def _update_repr(self, frame, now):
+        """Atualiza o representante de cena (mini 64x64 + timestamp)."""
+        self._repr_frame = _thumbnail_mini(frame)
+        self._repr_time = now
+        # Mantém fallback de alerta Telegram consistente
+        self._last_saved_thumb = self._repr_frame
+
+    def _should_emit_event(self, identity_info, fall, loitering, direction, frame, now):
+        """Eventos de baixo-valor em cena estável são suprimidos para não
+        poluir o grid com imagens quase-idênticas. Eventos de segurança
+        (identidade/intruso/queda/loitering/direção) sempre emitem."""
+        high_value = (
+            identity_info is not None
+            or fall
+            or loitering is not None
+            or direction is not None
+        )
+        if high_value:
+            return True
+        return self._scene_changed(frame, now)
+
+    def _capture_thumbnail(self, storage_frame, event_type, now, keep=THUMBNAIL_HISTORY_SIZE, days=None, event_id=None, force=False):
+        """Salva um thumbnail com dedup por similaridade (ou force=True).
 
         Retorna o path (str) se gravou, ou None se pulado (intervalo não
-        cumprido, frame similar ao último salvo ou falha de escrita).
-        Usado pelo thumbnail do evento e pelo history — mantém o estado
-        `_last_thumb_time`/`_last_saved_thumb` sempre que grava.
+        cumprido, cena estável já representada ou falha de escrita).
+        Em todo save bem-sucedido atualiza o representante de cena.
         """
-        if not self._should_save_thumbnail(storage_frame, now):
+        if not force and not self._should_save_thumbnail(storage_frame, now):
             return None
         try:
             cam_dir = THUMBNAILS_DIR / f"cam{self.camera['id']}"
@@ -156,7 +191,7 @@ class CameraWorker:
             logger.warning("Falha ao capturar thumbnail (câmera %s)", self.camera.get("name"))
             return None
         self._last_thumb_time = now
-        self._last_saved_thumb = _thumbnail_mini(storage_frame)
+        self._update_repr(storage_frame, now)
         self._last_saved_thumb_path = str(path)
         return str(path)
 
@@ -363,6 +398,7 @@ class CameraWorker:
             if motion_detected:
                 last_motion_time = time.time()
                 no_motion_alerted = False
+                motion_reported = True
 
                 try:
                     detections = self.object_detector.detect(frame)
@@ -410,18 +446,16 @@ class CameraWorker:
                         zone_classification, zone_schedule, now, fall, loitering,
                         direction, None, no_motion=False,
                     )
-                    thumb_path = self._capture_thumbnail(
-                        storage_frame, None, time.time(), thumb_keep, thumb_days,
-                        event_id=event.event_id,
-                    )
-                    event.thumbnail_path = thumb_path or self._latest_thumbnail_path()
-                    self.event_bus.enqueue(event)
-                    # Movimento/atividade real foi emitido: autoriza um
-                    # futuro "sem movimento" (se ficar quieto depois).
-                    motion_reported = True
-                    # Inicia a gravação do clipe (janela pré-evento + pós-evento);
-                    # o loop contínuo de escrita permanece em run().
-                    self.start_clip(event.event_id)
+                    if self._should_emit_event(identity_info, fall, loitering, direction, storage_frame, now):
+                        thumb_path = self._capture_thumbnail(
+                            storage_frame, None, time.time(), thumb_keep, thumb_days,
+                            event_id=event.event_id,
+                        )
+                        event.thumbnail_path = thumb_path or self._latest_thumbnail_path()
+                        self.event_bus.enqueue(event)
+                        # Inicia a gravação do clipe (janela pré-evento + pós-evento);
+                        # o loop contínuo de escrita permanece em run().
+                        self.start_clip(event.event_id)
                 except Exception:
                     logger.exception("Erro no processamento do frame (câmera %s)", self.camera.get("name"))
                     time.sleep(1)
@@ -441,6 +475,13 @@ class CameraWorker:
                         [], None, None, zone_name, zone_classification, zone_schedule,
                         time.time(), False, None, None, None, no_motion=True,
                     )
+                    # Força salvar o frame atual (cena quieta) -> grid mostra a
+                    # cena real, não a imagem anterior (stale).
+                    thumb_path = self._capture_thumbnail(
+                        storage_frame, "no_motion", time.time(),
+                        thumb_keep, thumb_days, event_id=None, force=True,
+                    )
+                    ev.thumbnail_path = thumb_path or self._latest_thumbnail_path()
                     self.event_bus.enqueue(ev)
                     motion_reported = False
 
