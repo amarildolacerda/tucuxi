@@ -6,13 +6,13 @@
 
 O Tucuxi Monitor observa suas câmeras IP com inteligência artificial e avisa quando algo importante acontece — presença, intrusão, queda, permanência suspeita, desconhecidos e mais. Todo o processamento é **100% local**: nada sai do seu equipamento, exceto pelos canais de alerta que você (ou o administrador) configurar.
 
-Este manual cobre o **uso diário**. Para instalação, deploy e configuração avançada (variáveis de ambiente, MQTT, Home Assistant, sirene, usuários), veja [docs/technical.md](docs/technical.md).
+Este manual cobre o **uso diário**. Para instalação, deploy e configuração avançada (variáveis de ambiente, MQTT, Home Assistant, sirene, usuários), veja [technical.md](technical.md).
 
 ## 2. Acesso e login
 
 1. Abra no navegador: `http://<servidor>:8000` (em geral `http://localhost:8000` no equipamento onde roda).
 2. Na tela de **login**, informe usuário e senha.
-3. Se for o primeiro acesso, um administrador precisa criar seu usuário (detalhes em `docs/technical.md`).
+3. Se for o primeiro acesso, um administrador precisa criar seu usuário (detalhes em `technical.md`).
 
 > Dica: mantenha sua senha segura. As sessões são registradas em auditoria.
 
@@ -29,7 +29,7 @@ Na seção **Câmeras**, você vê as câmeras cadastradas e seu estado.
 
 - Visualize a pré-visualização/estado de cada câmera.
 - Câmeras com região de privacidade aplicam *blur* automaticamente em thumbnails, clipes e snapshots.
-- O cadastro e a configuração de zonas/exclusão são feitos pelo administrador (veja `docs/technical.md`).
+- O cadastro e a configuração de zonas/exclusão são feitos pelo administrador (veja `technical.md`).
 
 ## 5. Eventos (histórico)
 
@@ -64,7 +64,7 @@ O Tucuxi gera alertas em eventos relevantes. Como você recebe e age:
 
 Na seção **Notificações**, você (ou o administrador) escolhe, para cada tipo de evento, em quais canais ele é notificado. Assim você evita ruído e recebe só o que importa.
 
-> Em eventos críticos (intruso, queda, permanência suspeita, mudança de direção, desconhecido), se o sistema estiver integrado com uma sirene/atuação externa, o dispositivo pode ser acionado automaticamente. Essa integração é configurada pelo instalador — veja a seção "Atuação externa (sirene)" no [README](README.md) e em `docs/technical.md`.
+> Em eventos críticos (intruso, queda, permanência suspeita, mudança de direção, desconhecido), se o sistema estiver integrado com uma sirene/atuação externa, o dispositivo pode ser acionado automaticamente. Essa integração é configurada pelo instalador — veja a seção "Atuação externa (sirene)" no [README](../README.md) e em `technical.md`.
 
 ## 7. Exportação de evidências
 
@@ -80,5 +80,5 @@ Para backup ou encaminhamento (ex.: para a polícia), o sistema exporta um pacot
 
 - **Muito ruído de alertas?** Ajuste o roteamento na seção Notificações para receber só os tipos que importam.
 - **Câmera offline?** Veja o status do sistema na Visão geral e revise a fonte no cadastro de câmeras.
-- **Instalação, deploy, MQTT/Home Assistant, sirene, usuários e permissões**: [docs/technical.md](docs/technical.md).
-- **Roadmap** (próximas funcionalidades): [docs/roadmap.md](docs/roadmap.md).
+- **Instalação, deploy, MQTT/Home Assistant, sirene, usuários e permissões**: [technical.md](technical.md).
+- **Roadmap** (próximas funcionalidades): [roadmap.md](roadmap.md).
