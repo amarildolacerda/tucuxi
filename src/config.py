@@ -138,7 +138,7 @@ EVENT_PRUNE_DEFAULT_DAYS = float(os.getenv("EVENT_PRUNE_DEFAULT_DAYS", "7"))
 # 0 = remove todos os não retidos; -1 (no param) usa este valor.
 EVENT_PRUNE_MAX_AGE_DAYS = float(os.getenv("EVENT_PRUNE_MAX_AGE_DAYS", "30"))
 # Intervalo de execução do prune (segundos)
-EVENT_PRUNE_INTERVAL_SECONDS = int(os.getenv("EVENT_PRUNE_INTERVAL_SECONDS", "3600"))
+EVENT_PRUNE_INTERVAL_SECONDS = int(os.getenv("EVENT_PRUNE_INTERVAL_SECONDS", "60"))
 
 # Fase 3 — comportamento/anomalia (tracking)
 TRACK_IOU_THRESHOLD = float(os.getenv("TRACK_IOU_THRESHOLD", "0.3"))
