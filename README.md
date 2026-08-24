@@ -70,6 +70,7 @@ O que está planejado — detalhes técnicos completos em [docs/roadmap.md](docs
 
 ## Documentação
 
+- [docs/manual-do-usuario.md](docs/manual-do-usuario.md) — manual de uso diário (dashboard, eventos, alertas, exportação)
 - [docs/technical.md](docs/technical.md) — instalação, configuração e referência técnica
 - [docs/roadmap.md](docs/roadmap.md) — roadmap completo (fases e backlog)
 - [docs/architecture-80-cameras.md](docs/architecture-80-cameras.md) — arquitetura para 80 câmeras (condomínio/fibra)
