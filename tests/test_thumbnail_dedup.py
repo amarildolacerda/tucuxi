@@ -89,7 +89,7 @@ def test_should_save_thumbnail_first_frame_true():
 def test_should_save_thumbnail_within_interval_false():
     worker = _make_worker()
     worker._repr_frame = _thumbnail_mini(_frame())
-    worker._repr_time = 1000.0
+    worker._last_thumb_time = 1000.0
     now = 1000.0 + THUMBNAIL_INTERVAL_SECONDS - 1
     assert worker._should_save_thumbnail(_frame(obj=(100, 300, 200, 400, 255)), now) is False
 

@@ -86,7 +86,7 @@ def test_update_repr_sets_state():
 # ---------- Task 3: _capture_thumbnail force ----------
 
 def test_capture_thumbnail_force_bypasses_dedup(tmp_path, monkeypatch):
-    import src.main as main_mod
+    main_mod = importlib.import_module("src.main")
     monkeypatch.setattr(main_mod, "THUMBNAILS_DIR", tmp_path)
     storage = _FakeStorage()
     w = _make_worker(storage=storage)
@@ -123,7 +123,7 @@ def test_should_emit_event_low_value_suppressed_when_stable():
 
 
 def test_run_suppresses_low_value_and_still_emits_no_motion(tmp_path, monkeypatch):
-    import src.main as main_mod
+    main_mod = importlib.import_module("src.main")
 
     # Frame com bloco que "pisca" (+30) a cada frame: dispara MotionDetector
     # (área > min_area) mas mantém média 64x64 <= THUMBNAIL_DIFF_THRESHOLD (cena similar).

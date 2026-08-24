@@ -217,7 +217,8 @@ class TestAuthIntegration:
         # New client (no cookies carried over)
         c2 = app.test_client()
         resp = c2.post("/cameras", json={"name": "test", "source": "rtsp://test"})
-        assert resp.status_code == 401
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]
 
     def test_admin_can_access_protected_route(self, client):
         token = self._setup_and_login(client)
@@ -231,7 +232,8 @@ class TestAuthIntegration:
         assert resp.status_code == 200
         resp = client.post("/cameras", json={"name": "test", "source": "rtsp://test"},
                           headers=self._auth_headers(token))
-        assert resp.status_code == 401
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]
 
     def test_create_user_via_api(self, client):
         token = self._setup_and_login(client)
