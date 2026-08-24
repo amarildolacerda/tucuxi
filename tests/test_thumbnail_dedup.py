@@ -11,8 +11,8 @@ import importlib
 import numpy as np
 
 main_mod = importlib.import_module("src.main")
-from src.config import THUMBNAIL_DIFF_THRESHOLD, THUMBNAIL_INTERVAL_SECONDS
-from src.main import CameraWorker, frames_similar
+from src.config import THUMBNAIL_DIFF_THRESHOLD, THUMBNAIL_INTERVAL_SECONDS, EVENT_DEDUP_WINDOW_SECONDS
+from src.main import CameraWorker, frames_similar, _thumbnail_mini
 
 
 def _frame(fill=100, obj=None):
@@ -88,27 +88,32 @@ def test_should_save_thumbnail_first_frame_true():
 
 def test_should_save_thumbnail_within_interval_false():
     worker = _make_worker()
+    worker._repr_frame = _thumbnail_mini(_frame())
     worker._last_thumb_time = 1000.0
-    worker._last_saved_thumb = _frame()
     now = 1000.0 + THUMBNAIL_INTERVAL_SECONDS - 1
     assert worker._should_save_thumbnail(_frame(obj=(100, 300, 200, 400, 255)), now) is False
 
 
-def test_should_save_thumbnail_similar_after_interval_false():
+def test_should_save_thumbnail_similar_within_window_false():
     worker = _make_worker()
-    worker._last_thumb_time = 1000.0
-    worker._last_saved_thumb = _frame()
+    worker._repr_frame = _thumbnail_mini(_frame())
+    worker._repr_time = 1000.0
     now = 1000.0 + THUMBNAIL_INTERVAL_SECONDS + 1
-    assert worker._should_save_thumbnail(_frame(), now) is False  # cena estática -> dedup
+    # cena estática DENTRO da janela -> dedup (não salva)
+    assert worker._should_save_thumbnail(_frame(), now) is False
 
 
-def test_should_save_thumbnail_different_after_interval_true():
+def test_should_save_thumbnail_different_or_window_true():
     worker = _make_worker()
-    worker._last_thumb_time = 1000.0
-    worker._last_saved_thumb = _frame()
-    now = 1000.0 + THUMBNAIL_INTERVAL_SECONDS + 1
-    b = _frame(obj=(100, 300, 200, 400, 255))
-    assert worker._should_save_thumbnail(b, now) is True  # cena mudou -> salvar
+    worker._repr_frame = _thumbnail_mini(_frame())
+    worker._repr_time = 1000.0
+    # cena mudou -> salva
+    assert worker._should_save_thumbnail(_frame(obj=(100, 300, 200, 400, 255)), 1000.0 + 1) is True
+    # janela expirada -> salva mesmo cena igual
+    worker2 = _make_worker()
+    worker2._repr_frame = _thumbnail_mini(_frame())
+    worker2._repr_time = 1000.0
+    assert worker2._should_save_thumbnail(_frame(), 1000.0 + EVENT_DEDUP_WINDOW_SECONDS + 1) is True
 
 
 # ---------- Caminho completo: _capture_thumbnail ----------

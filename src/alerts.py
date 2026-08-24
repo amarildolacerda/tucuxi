@@ -6,7 +6,7 @@ import requests
 import paho.mqtt.publish as publish
 
 from .notifications import is_enabled
-from .config import APP_VERSION
+from .config import APP_VERSION, SIREN_MQTT_TOPIC, SIREN_EVENT_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +210,51 @@ def home_assistant_handler(payload: Dict):
 
 
 home_assistant_handler.channel = "automation"
+
+
+def siren_handler(payload: Dict):
+    """Aciona sirene/dispositivo externo via MQTT em evento crítico (Fase 5.1).
+
+    Publica um comando no tópico SIREN_MQTT_TOPIC apenas para eventos cujo
+    event_type esteja em SIREN_EVENT_TYPES. Silencia quando o broker MQTT não
+    está configurado. Canal: "automation".
+    """
+    event_type = payload.get("event_type")
+    if event_type not in SIREN_EVENT_TYPES:
+        return
+
+    broker = os.getenv("MQTT_BROKER_URL")
+    if not broker:
+        logger.debug("Siren handler skipped: MQTT_BROKER_URL not configured")
+        return
+    port = int(os.getenv("MQTT_BROKER_PORT", "1883"))
+    username = os.getenv("MQTT_USERNAME")
+    password = os.getenv("MQTT_PASSWORD")
+    topic = SIREN_MQTT_TOPIC
+
+    command = {
+        "action": "siren",
+        "camera_id": payload.get("camera_id"),
+        "zone": payload.get("zone"),
+        "event_type": event_type,
+        "timestamp": payload.get("timestamp"),
+    }
+    try:
+        publish.single(
+            topic,
+            payload=json.dumps(command),
+            hostname=broker,
+            port=port,
+            auth={"username": username, "password": password} if username and password else None,
+            qos=0,
+            retain=False,
+        )
+        logger.info("Siren command published topic=%s event=%s", topic, event_type)
+    except Exception as e:
+        logger.warning("Siren publish failed (broker %s:%s): %s", broker, port, e)
+
+
+siren_handler.channel = "automation"
 
 
 def _escape_markdown(text) -> str:

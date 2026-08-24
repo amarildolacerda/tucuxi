@@ -88,6 +88,17 @@ MQTT_USERNAME = os.getenv("MQTT_USERNAME", "kzuca")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "123")
 MQTT_TOPIC = os.getenv("MQTT_TOPIC", "homeassistant/secur/alert")
 
+# Sirene / atuação externa (Fase 5.1): aciona dispositivo em evento crítico via MQTT
+SIREN_MQTT_TOPIC = os.getenv("SIREN_MQTT_TOPIC", "secur/automation/siren")
+SIREN_EVENT_TYPES = {
+    t.strip()
+    for t in os.getenv(
+        "SIREN_EVENT_TYPES",
+        "intruder_detected,fall_detected,loitering,direction_change,unknown_detected",
+    ).split(",")
+    if t.strip()
+}
+
 THUMBNAILS_DIR = DATA_DIR / "thumbnails"
 THUMBNAILS_DIR.mkdir(exist_ok=True)
 THUMBNAIL_INTERVAL_SECONDS = float(os.getenv("THUMBNAIL_INTERVAL_SECONDS", "20"))
@@ -97,6 +108,10 @@ THUMBNAIL_INTERVAL_SECONDS = float(os.getenv("THUMBNAIL_INTERVAL_SECONDS", "20")
 # 2.5% do frame = ~9.1. 3.0 cobre ruído leve e separa mudança real de cena.
 THUMBNAIL_DIFF_THRESHOLD = float(os.getenv("THUMBNAIL_DIFF_THRESHOLD", "3.0"))
 THUMBNAIL_HISTORY_SIZE = int(os.getenv("THUMBNAIL_HISTORY_SIZE", "30"))
+# Janela de deduplicação por cena estável: uma cena estável é representada
+# por no máximo 1 thumbnail/evento por este período (5–10 min). Após a janela,
+# um refresh é salvo mesmo sem mudança de cena.
+EVENT_DEDUP_WINDOW_SECONDS = float(os.getenv("EVENT_DEDUP_WINDOW_SECONDS", "300"))
 
 CLIP_PRE_SECONDS = float(os.getenv("CLIP_PRE_SECONDS", "10"))
 CLIP_POST_SECONDS = float(os.getenv("CLIP_POST_SECONDS", "10"))
@@ -123,7 +138,7 @@ EVENT_PRUNE_DEFAULT_DAYS = float(os.getenv("EVENT_PRUNE_DEFAULT_DAYS", "7"))
 # 0 = remove todos os não retidos; -1 (no param) usa este valor.
 EVENT_PRUNE_MAX_AGE_DAYS = float(os.getenv("EVENT_PRUNE_MAX_AGE_DAYS", "30"))
 # Intervalo de execução do prune (segundos)
-EVENT_PRUNE_INTERVAL_SECONDS = int(os.getenv("EVENT_PRUNE_INTERVAL_SECONDS", "3600"))
+EVENT_PRUNE_INTERVAL_SECONDS = int(os.getenv("EVENT_PRUNE_INTERVAL_SECONDS", "60"))
 
 # Fase 3 — comportamento/anomalia (tracking)
 TRACK_IOU_THRESHOLD = float(os.getenv("TRACK_IOU_THRESHOLD", "0.3"))
