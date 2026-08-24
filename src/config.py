@@ -88,6 +88,17 @@ MQTT_USERNAME = os.getenv("MQTT_USERNAME", "kzuca")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "123")
 MQTT_TOPIC = os.getenv("MQTT_TOPIC", "homeassistant/secur/alert")
 
+# Sirene / atuação externa (Fase 5.1): aciona dispositivo em evento crítico via MQTT
+SIREN_MQTT_TOPIC = os.getenv("SIREN_MQTT_TOPIC", "secur/automation/siren")
+SIREN_EVENT_TYPES = {
+    t.strip()
+    for t in os.getenv(
+        "SIREN_EVENT_TYPES",
+        "intruder_detected,fall_detected,loitering,direction_change,unknown_detected",
+    ).split(",")
+    if t.strip()
+}
+
 THUMBNAILS_DIR = DATA_DIR / "thumbnails"
 THUMBNAILS_DIR.mkdir(exist_ok=True)
 THUMBNAIL_INTERVAL_SECONDS = float(os.getenv("THUMBNAIL_INTERVAL_SECONDS", "20"))

@@ -283,7 +283,8 @@ class EventStorage:
             self.connection.commit()
             return cursor.rowcount > 0
 
-    def list_events(self, limit=100, level=None, camera_id=None, source=None, retained=None):
+    def list_events(self, limit=100, level=None, camera_id=None, source=None, retained=None,
+                    start=None, end=None):
         with self.lock:
             cursor = self.connection.cursor()
             sql = ("SELECT id, timestamp, camera_id, zone, event_type, details, clip_path, level, dropped, source, retained "
@@ -300,7 +301,21 @@ class EventStorage:
             sql += " ORDER BY id DESC LIMIT ?"
             params.append(limit)
             cursor.execute(sql, params)
-            return [dict(row) for row in cursor.fetchall()]
+            rows = [dict(row) for row in cursor.fetchall()]
+        if start is not None or end is not None:
+            filtered = []
+            for row in rows:
+                try:
+                    ts = datetime.fromisoformat(row["timestamp"]).timestamp()
+                except (ValueError, TypeError):
+                    continue
+                if start is not None and ts < float(start):
+                    continue
+                if end is not None and ts > float(end):
+                    continue
+                filtered.append(row)
+            rows = filtered
+        return rows
 
     def add_camera(self, name: str, source: str, zone: str = None, alert_classes=None, exclusion_zones=None, mask_polygons=None):
         with self.lock:
@@ -620,6 +635,32 @@ class EventStorage:
             )
             row = cursor.fetchone()
             return dict(row) if row else None
+
+    def get_event_thumbnail_path(self, event_id):
+        """Retorna o path da thumbnail associada a um evento (camera_thumbnails.event_id)."""
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT path FROM camera_thumbnails WHERE event_id = ? ORDER BY id DESC LIMIT 1",
+                (str(event_id),),
+            )
+            row = cursor.fetchone()
+            return row["path"] if row else None
+
+    def get_event_clip_path(self, event_id):
+        """Retorna o path do clipe de um evento (events.clip_path ou event_clips)."""
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT clip_path FROM events WHERE id = ?", (event_id,))
+            row = cursor.fetchone()
+            if row and row["clip_path"]:
+                return row["clip_path"]
+            cursor.execute(
+                "SELECT path FROM event_clips WHERE event_id = ? ORDER BY id DESC LIMIT 1",
+                (str(event_id),),
+            )
+            row = cursor.fetchone()
+            return row["path"] if row else None
 
     def prune_event_clips(self, camera_id: int, keep: int = 20, max_age_days: int = None):
         with self.lock:

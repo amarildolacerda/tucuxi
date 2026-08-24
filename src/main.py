@@ -42,7 +42,7 @@ from .detector import ObjectDetector
 from .motion import MotionDetector
 from .geometry import bbox_center_in_polygons
 from .masking import frame_for_storage
-from .alerts import AlertService, telegram_handler, mqtt_handler, home_assistant_handler, mqtt_register_device
+from .alerts import AlertService, telegram_handler, mqtt_handler, home_assistant_handler, siren_handler, mqtt_register_device
 from .app import create_app
 from .storage import EventStorage
 from .identity import IdentityRecognizer, RECOGNITION_LABELS, build_recognizer
@@ -676,6 +676,7 @@ def main():
     alerts.register_handler(telegram_handler)
     alerts.register_handler(mqtt_handler)
     alerts.register_handler(home_assistant_handler)
+    alerts.register_handler(siren_handler)
     alerts.routing = storage.get_all_routing()
 
     object_detector = ObjectDetector(

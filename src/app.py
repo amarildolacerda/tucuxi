@@ -17,6 +17,8 @@ import json
 import numpy as np
 from typing import Optional
 import logging
+import io
+import zipfile
 
 logger = logging.getLogger(__name__)
 
@@ -517,6 +519,41 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
             return jsonify({"error": "Clipe não encontrado"}), 404
         return send_file(path, mimetype="video/mp4")
 
+    @app.route("/export")
+    def export_events():
+        """Exporta eventos + thumbnails + clipes em um arquivo ZIP (Fase 5.4).
+
+        Query params: camera_id (int), start (epoch), end (epoch), limit (default 500, cap 2000).
+        """
+        camera_id = request.args.get("camera_id", type=int)
+        start = request.args.get("start", type=float)
+        end = request.args.get("end", type=float)
+        limit = request.args.get("limit", default=500, type=int)
+        limit = max(1, min(limit, 2000))
+
+        events = storage.list_events(camera_id=camera_id, limit=limit, start=start, end=end)
+        for ev in events:
+            ev["thumbnail_path"] = storage.get_event_thumbnail_path(ev["id"])
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("events.json", json.dumps(events, indent=2, default=str))
+            for ev in events:
+                thumb = ev.get("thumbnail_path")
+                if thumb and os.path.exists(thumb):
+                    ext = os.path.splitext(thumb)[1] or ".jpg"
+                    zf.write(thumb, f"thumbnails/{ev['id']}{ext}")
+                clip = storage.get_event_clip_path(ev["id"])
+                if clip and os.path.exists(clip):
+                    zf.write(clip, f"clips/{os.path.basename(clip)}")
+        buf.seek(0)
+        return send_file(
+            buf,
+            mimetype="application/zip",
+            as_attachment=True,
+            download_name=f"secur-export-{int(time.time())}.zip",
+        )
+
     @app.route("/docs")
     def docs():
         api_docs = [
@@ -540,6 +577,7 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
             {"path": "/camera/<id>/clips", "method": "GET", "description": "Lista os últimos clipes de vídeo da câmera"},
             {"path": "/clips/<id>", "method": "GET", "description": "Metadados de um clipe"},
             {"path": "/clips/<id>/video", "method": "GET", "description": "Stream MP4 de um clipe"},
+            {"path": "/export", "method": "GET", "description": "Exporta eventos + thumbnails + clipes em ZIP"},
             {"path": "/api/notifications", "method": "GET", "description": "Canais, eventos e routing de notificações"},
             {"path": "/api/notifications/routing", "method": "PUT", "description": "Atualiza routing de um evento em um canal"},
             {"path": "/api/classes", "method": "GET", "description": "Lista de classes de objetos detectáveis (filtro por câmera)"},

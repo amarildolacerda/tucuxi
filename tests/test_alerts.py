@@ -425,3 +425,42 @@ def test_telegram_handler_photo_failure_falls_back_to_text(monkeypatch, tmp_path
 
     assert len(calls) == 2
     assert calls[1].startswith("https://api.telegram.org/bottoken123/sendMessage")
+
+
+# ── Fase 5.1: siren_handler ──
+def test_siren_handler_publishes_for_critical_event(monkeypatch):
+    from src import alerts
+    calls = []
+    def fake_single(topic, payload=None, hostname=None, port=None, auth=None, qos=None, retain=None):
+        calls.append((topic, payload))
+    monkeypatch.setattr(alerts.publish, "single", fake_single)
+    monkeypatch.setenv("MQTT_BROKER_URL", "localhost")
+    monkeypatch.setenv("MQTT_BROKER_PORT", "1883")
+    alerts.siren_handler({
+        "event_type": "intruder_detected", "camera_id": 1, "zone": "entrada", "timestamp": 123.0,
+    })
+    assert len(calls) == 1
+    topic, payload = calls[0]
+    assert topic == alerts.SIREN_MQTT_TOPIC
+    data = json.loads(payload)
+    assert data["action"] == "siren"
+    assert data["event_type"] == "intruder_detected"
+    assert data["camera_id"] == 1
+
+
+def test_siren_handler_skips_non_critical_event(monkeypatch):
+    from src import alerts
+    calls = []
+    monkeypatch.setattr(alerts.publish, "single", lambda *a, **k: calls.append(a))
+    monkeypatch.setenv("MQTT_BROKER_URL", "localhost")
+    alerts.siren_handler({"event_type": "motion_detected", "camera_id": 1})
+    assert calls == []
+
+
+def test_siren_handler_skips_without_broker(monkeypatch):
+    from src import alerts
+    calls = []
+    monkeypatch.setattr(alerts.publish, "single", lambda *a, **k: calls.append(a))
+    monkeypatch.delenv("MQTT_BROKER_URL", raising=False)
+    alerts.siren_handler({"event_type": "intruder_detected", "camera_id": 1})
+    assert calls == []
