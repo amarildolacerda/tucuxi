@@ -196,6 +196,8 @@ O projeto captura vídeo de câmeras IP, realiza detecção de movimento e class
 | `MQTT_USERNAME` | `kzuca` | Usuário MQTT |
 | `MQTT_PASSWORD` | `123` | Senha MQTT |
 | `MQTT_TOPIC` | `homeassistant/secur/alert` | Tópico MQTT |
+| `SIREN_MQTT_TOPIC` | `secur/automation/siren` | Tópico MQTT para o comando de sirene/atuação externa (Fase 5.1) |
+| `SIREN_EVENT_TYPES` | `intruder_detected,fall_detected,loitering,direction_change,unknown_detected` | Tipos de evento que disparam a sirene (Fase 5.1) |
 | `TRACK_IOU_THRESHOLD` | `0.3` | IoU do tracking |
 | `TRACK_MAX_AGE_SECONDS` | `2.0` | Idade máxima do track |
 | `LOITERING_SECONDS` | `30` | Tempo para loitering |

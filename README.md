@@ -27,6 +27,7 @@ O tucuxi é o golfinho de rio amazônico que enxerga por ecolocalização: perce
 - Reconhecimento de identidade (conhecidos vs. desconhecidos)
 - Comportamentos: permanência suspeita (loitering), direção proibida, detecção de queda
 - Alertas com evidência (thumbnail e clipe) via Telegram, MQTT e Home Assistant
+- Atuação externa automática: em evento crítico, aciona sirene/dispositivo via MQTT/Home Assistant
 - Dashboard web com visualização ao vivo e histórico de eventos
 - Privacidade: mascaramento de regiões, modo privacidade e retenção seletiva
 - Base pronta para situações avançadas: fogo/fumaça, alagamento, objetos abandonados, aglomeração (veja o roadmap)
@@ -45,6 +46,18 @@ Guia completo de instalação e configuração em [docs/technical.md](docs/techn
 1. `docker compose up --build`
 2. Acesse `http://localhost:8000` e cadastre suas câmeras
 3. Configure os canais de alerta (Telegram, MQTT, Home Assistant) e pronto
+
+## Atuação externa (sirene)
+
+Em eventos críticos — intruso, queda, permanência suspeita (loitering), mudança de direção e desconhecido — o Tucuxi pode acionar automaticamente um dispositivo externo (sirene, buzina ou qualquer atuador no Home Assistant) publicando um comando MQTT.
+
+- **Canal:** usa o canal `automation`, já habilitado para esses eventos por padrão.
+- **Configuração** (variáveis de ambiente — ver [docs/technical.md](docs/technical.md)):
+  - `SIREN_MQTT_TOPIC` — tópico onde o comando é publicado (padrão `secur/automation/siren`)
+  - `SIREN_EVENT_TYPES` — tipos de evento que disparam a sirene (padrão: `intruder_detected, fall_detected, loitering, direction_change, unknown_detected`)
+  - Reutiliza `MQTT_BROKER_URL`, `MQTT_BROKER_PORT`, `MQTT_USERNAME` e `MQTT_PASSWORD` do broker já configurado.
+- **Comando publicado** (JSON): `{"action":"siren","camera_id":1,"zone":"entrada","event_type":"intruder_detected","timestamp":123.0}`
+- **Como ligar uma sirene real:** no Home Assistant (ou qualquer cliente MQTT), crie uma automação que assina `secur/automation/siren` e, ao receber `{"action":"siren"}`, aciona o atuador (switch, script ou cena).
 
 ## Roadmap
 
