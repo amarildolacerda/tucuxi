@@ -176,30 +176,49 @@ Regras:
 
 ### 4.6 Inventário de ambientes (requisito 2026-09-06)
 
+Orientação do terreno (2026-09-06): **portão no extremo norte, caixa d'água no extremo sul, área social no extremo oeste, garagens a leste.**
+
+```
+        N — portão_entrada (L1)
+        |
+lateral_norte (faixa N, junto ao portão)
+        |
+estacionamento — garagem (LESTE) ... casa ... area_social/piscina/firepit (OESTE)
+        |
+lateral_leste (corredor E)     lateral_oeste (corredor O)
+        |
+lateral_sul (faixa S) — caixa_dagua (extremo S)
+```
+
+Consequências: intrusão típica entra pelo **norte (portão)** e desce para leste (garagens) ou oeste (social); `lateral_norte` é o primeiro corredor após o portão; `lateral_sul` cobre fundos/caixa d'água. Vizinhança (§5.7b) segue essa adjacência real.
+
 20 ambientes (13 externos + 7 internos) mapeados para camada + classificação de zona Tucuxi (pública/segurança/privativa — `src/event_rules.py`, CRUD `/zones`):
 
 **Externos / perimetrais:**
 
 | # | Ambiente | Slug | Camada | Classificação | Visão | Sensores HA | Dissuasão/atuador |
 |---|---|---|---|---|---|---|---|
-| 1 | Portão entrada | `portao_entrada` | L1 | segurança | cam pessoa/veículo | PIR externo, beam, contato portão, LUX | luz perimetral 10min, bip |
+| 1 | Portão entrada (extremo N) | `portao_entrada` | L1 | segurança | cam pessoa/veículo | PIR externo, beam, contato portão, LUX | luz perimetral 10min, bip |
 | 2 | Acesso ao jardim | `acesso_jardim` | L2 | segurança | cam pessoa | PIR + mmWave | holofote + aspersor jardim 5min |
 | 3 | Rampa de acesso | `rampa` | L2 | segurança | cam pessoa/veículo | PIR, beam | luz rampa + sirene curta (persistente) |
 | 4 | Estacionamento | `estacionamento` | L2 | segurança | cam veículo/pessoa | PIR, contato cancela/garagem | holofote + alerta |
-| 5 | Firepit | `firepit` | L2/L3 social | segurança* | cam pessoa (máscara fogo p/ falso-positivo) | PIR, (futuro: calor/fumaça) | luz firepit, sem água |
+| 5 | Firepit (próx. social/O) | `firepit` | L2/L3 social | segurança* | cam pessoa (máscara fogo p/ falso-positivo) | PIR, (futuro: calor/fumaça) | luz firepit, sem água |
 | 6 | Entrada principal | `entrada_principal` | L3 | privativa | cam pessoa + identidade | PIR, contato porta, campainha | luz entrada + TTS + sirene (persistente) |
-| 7 | Garagem | `garagem` | L2/L3 | segurança | cam veículo/pessoa | PIR, contato portão garagem | luz + alerta; sem aspersor |
-| 8 | Lateral leste | `lateral_leste` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor leste 5min |
-| 9 | Lateral norte | `lateral_norte` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor norte 5min |
-| 10 | Lateral sul | `lateral_sul` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor sul 5min |
-| 11 | Lateral oeste | `lateral_oeste` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor oeste 5min |
-| 12 | Área social | `area_social` | L3 social | pública* | cam pessoa (modo privacidade respeitado) | PIR, (somente presença) | luz social, sem dissuasão agressiva |
-| 13 | Piscina | `piscina` | L3 social | pública* | cam pessoa (máscara + retenção seletiva) | PIR, (futuro: sensor de queda na água) | luz piscina, sem aspersor/sirene direta |
+| 7 | Garagem (LESTE) | `garagem` | L2/L3 | segurança | cam veículo/pessoa | PIR, contato portão garagem | luz + alerta; sem aspersor |
+| 8 | Lateral leste (corredor garagens) | `lateral_leste` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor leste 5min |
+| 9 | Lateral norte (faixa portão) | `lateral_norte` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor norte 5min |
+| 10 | Lateral sul (fundos/caixa d'água) | `lateral_sul` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor sul 5min |
+| 11 | Lateral oeste (corredor social) | `lateral_oeste` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor oeste 5min |
+| 12 | Área social (extremo O) | `area_social` | L3 social | pública* | cam pessoa (modo privacidade respeitado) | PIR, (somente presença) | luz social, sem dissuasão agressiva |
+| 13 | Piscina (próx. social/O) | `piscina` | L3 social | pública* | cam pessoa (máscara + retenção seletiva) | PIR, (futuro: sensor de queda na água) | luz piscina, sem aspersor/sirene direta |
+| 21 | Caixa d'água (extremo S) | `caixa_dagua` | L1 | segurança | cam pessoa (opcional) | PIR, contato tampa, nível | luz + alerta (sem aspersor — preservar água) |
 
 Notas (externos):
 - `* Firepit/área social/piscina`: classificação `pública` dentro do lote (convivência) mas com regras próprias — dissuasão agressiva (aspersor/sirene) **desligada** por padrão para não molhar convidados; em **viagem** viram `segurança` (qualquer presença alerta). Privacidade: `mask_polygons` + `PRIVACY_MODE` (`docs/technical.md:208`) e retenção seletiva por zona valem aqui.
 - Laterais Leste/Norte/Sul/Oeste: mesma receita (PIR + beam + holofote + aspersor setorizado), só muda `slug` e `target_entity` (`switch.aspersor_leste` etc.) — permite confirmar direção do intruso (qual lateral cruzou primeiro).
 - Rosa (exemplo anterior) = instância de `acesso_jardim` ou lateral — manter `rosa` como slug operacional ou renomear para `acesso_jardim`; decidir em P10.
+- **Vizinhança real (§5.7b):** `portao_entrada` ↔ `lateral_norte`; `lateral_norte` ↔ `estacionamento` + `lateral_leste/oeste`; `lateral_leste` ↔ `garagem/estacionamento`; `lateral_oeste` ↔ `area_social/piscina/firepit`; `lateral_sul` ↔ `caixa_dagua` + `lateral_leste/oeste`.
+- Caixa d'água (S): sem aspersor (não desperdiçar água); foco em detecção + luz.
 - Cada ambiente = 1 zona Tucuxi (`/zones`) + 1 entrada no `entity_map` (§5.7) com `layer`, `modos_ativos`, `confirmacao_cruzada`, `inibidores`.
 
 **Internos (L3 interno — privativa, sem câmera por padrão):**
@@ -420,12 +439,12 @@ Cada ambiente (§4.6) é um **grupo**: 1+ câmeras + N sensores físicos + 1+ at
   "slugs": ["lateral_leste"],
   "cameras": ["cam_lateral_leste"],
   "sensores": [
-    {"entity": "binary_sensor.pir_leste_1", "tipo": "pir", "posicao": "inicio_corredor"},
+    {"entity": "binary_sensor.pir_leste_1", "tipo": "pir", "posicao": "inicio_corredor_norte"},
     {"entity": "binary_sensor.beam_leste", "tipo": "beam", "posicao": "meio_corredor"},
-    {"entity": "binary_sensor.mmwave_leste", "tipo": "mmwave", "posicao": "fim_corredor"}
+    {"entity": "binary_sensor.mmwave_leste", "tipo": "mmwave", "posicao": "fim_corredor_sul"}
   ],
   "atuadores": ["light.holofote_leste", "switch.aspersor_leste"],
-  "vizinhos": ["portao_entrada", "lateral_norte"]
+  "vizinhos": ["lateral_norte", "garagem", "estacionamento", "lateral_sul"]
 }
 ```
 
