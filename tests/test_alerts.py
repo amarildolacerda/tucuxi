@@ -68,21 +68,19 @@ def test_mqtt_handler_publishes(monkeypatch):
     monkeypatch.setenv("MQTT_PASSWORD", "pass")
     monkeypatch.setenv("MQTT_TOPIC", "test/topic")
 
-    captured = {}
+    all_calls = []
 
     def fake_publish_single(topic, payload=None, hostname=None, port=None, auth=None, qos=None, retain=None):
-        captured["topic"] = topic
-        captured["payload"] = payload
-        captured["hostname"] = hostname
-        captured["port"] = port
-        captured["auth"] = auth
-        captured["qos"] = qos
-        captured["retain"] = retain
+        all_calls.append({"topic": topic, "payload": payload, "hostname": hostname,
+                          "port": port, "auth": auth, "qos": qos, "retain": retain})
 
     monkeypatch.setattr("src.alerts.publish.single", fake_publish_single)
     payload = {"camera_id": "1", "event_type": "motion_detected"}
     mqtt_handler(payload)
 
+    legacy_calls = [c for c in all_calls if c["topic"] == "test/topic"]
+    assert len(legacy_calls) >= 1
+    captured = legacy_calls[-1]
     assert captured["topic"] == "test/topic"
     assert json.loads(captured["payload"])["camera_id"] == "1"
     assert captured["hostname"] == "test-broker"

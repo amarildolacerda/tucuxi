@@ -166,11 +166,44 @@ def mqtt_handler(payload: Dict):
                 elif payload.get("event_type") == "no_motion":
                     client.publish(f"secur/{safe_id}/state", "idle", qos=0, retain=True)
                 logger.info("MQTT alert published to topic=%s camera_id=%s", topic, payload.get("camera_id"))
+        try:
+            publish_enriched_event(to_enriched_event(payload))
+        except Exception:
+            logger.exception("Enriched event publish failed")
     except Exception as e:
         logger.warning("MQTT alert failed (broker %s:%s): %s", broker, port, e)
 
 
 mqtt_handler.channel = "automation"
+
+
+def to_enriched_event(payload: Dict, camera_slug: str = None) -> Dict:
+    from .predictor.predictor.schemas import EnrichedEvent
+    slug = camera_slug or str(payload.get("zone") or payload.get("camera_id", "0"))
+    return EnrichedEvent(
+        camera=slug,
+        camera_id=str(payload.get("camera_id", "0")),
+        zone=str(payload.get("zone") or slug),
+        zone_classification=str(payload.get("zone_classification") or "publica"),
+        event_type=str(payload.get("event_type") or "motion_detected"),
+        evento=str(payload.get("details") or payload.get("evento") or "pessoa"),
+        probabilidade=float(payload.get("probabilidade") or 0.0),
+    ).to_dict()
+
+
+def publish_enriched_event(enriched: Dict) -> None:
+    broker = os.getenv("MQTT_BROKER_URL", "192.168.1.12")
+    port = int(os.getenv("MQTT_BROKER_PORT", "1883"))
+    username = os.getenv("MQTT_USERNAME", "kzuca")
+    password = os.getenv("MQTT_PASSWORD", "123")
+    if not broker:
+        logger.debug("Enriched event skipped: MQTT_BROKER_URL not configured")
+        return
+    topic = f"tucuxi/camera/{enriched.get('camera', 'unknown')}/event"
+    publish.single(topic, json.dumps(enriched),
+                   hostname=broker, port=port,
+                   auth={"username": username, "password": password},
+                   retain=False, qos=0)
 
 
 def home_assistant_handler(payload: Dict):
