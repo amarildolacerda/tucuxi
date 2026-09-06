@@ -113,18 +113,19 @@ HA: suggester propõe "Detectamos padrão na rosa 19h. Criar: se alarme armado +
 
 ### 4.4 Modos de operação (requisito 2026-09-06)
 
-Dois modos, mapeados para `alarm_control_panel` nativo do HA (sem entidade custom):
+Três estados, canônico em `alarm_control_panel` + **espelho em switch virtual on/off para voz** (Alexa/Google/Assist):
 
-| Modo Tucuxi | Estado HA | Quando usar | Comportamento |
-|---|---|---|---|
-| **Alarme desarmado** | `disarmed` | Em casa, rotina normal | Monitoramento leve: só eventos críticos (`intruder`, `fall`, `loitering`) geram alerta; atuadores (aspersor) **não** disparam; predição continua aprendendo mas não sugere |
-| **Alarme armado** | `armed_home` | Presente, mas com pontos de segurança ativos | Monitora pontos de segurança mapeados (ex: rosa): movimento → atua (aspersor 5min) + alerta; demais zonas só registram |
-| **Viagem** | `armed_away` | Casa vazia | **Qualquer ponto alerta** (sensibilidade máxima, sem filtro de zona) + **simulação de presença** (luzes ligam/desligam por rotina aprendida) + notificação imediata Telegram/HA |
+| Modo Tucuxi | Estado HA canônico | Switch virtual (voz) | Quando usar | Comportamento |
+|---|---|---|---|---|
+| **Alarme desarmado** | `disarmed` | `switch.tucuxi_alarme` OFF | Em casa, rotina normal | Monitoramento leve: só eventos críticos (`intruder`, `fall`, `loitering`) geram alerta; atuadores (aspersor) **não** disparam; predição continua aprendendo mas não sugere |
+| **Alarme armado** | `armed_home` | `switch.tucuxi_alarme` ON | Presente, mas com pontos de segurança ativos | Monitora pontos de segurança mapeados (ex: rosa): movimento → atua (aspersor 5min) + alerta; demais zonas só registram |
+| **Viagem** | `armed_away` | `switch.tucuxi_viagem` ON (override) | Casa vazia | **Qualquer ponto alerta** (sensibilidade máxima, sem filtro de zona) + **simulação de presença** (luzes ligam/desligam por rotina aprendida) + notificação imediata Telegram/HA |
 
 Detalhes:
 - **Alarme armado (presente):** evita disparo contra morador — só zonas `segurança/privativa` no `entity_map` com `alarm_required: true` atuam. Ex: rosa → aspersor; portão → luz; quintal interno ignora.
 - **Viagem:** `suggester` suprimido (sem "deseja automatizar?"); tudo vira ação direta. Simulação de presença usa `tucuxi/predictions/+` invertido: publica `tucuxi/automation/actuator` para `light.*` nos horários de maior P(movimento) histórico — parece que há gente em casa.
-- Troca de modo: usuário arma/desarma no HA (`alarm_control_panel`) ou dashboard Tucuxi (`PUT /api/mode` futuro → espelha em `tucuxi/ha/alarm_mode` retain). Predictor subscreve e condiciona P(evento | modo).
+- **Switch virtual para voz:** `switch.tucuxi_alarme` (MQTT switch, retain) espelha `armed_home/disarmed`; `switch.tucuxi_viagem` espelha `armed_away`. Voz: *"Alexa, ligar alarme"* → ON; *"desligar alarme"* → OFF; *"ativar modo viagem"* → ON viagem. HA expõe via `cloud: alexa/google` ou Assist sem PIN (atuador, não alarme com código).
+- Troca de modo: voz/HA (`switch` ou `alarm_control_panel`) ou dashboard Tucuxi (`PUT /api/mode` futuro → espelha em `tucuxi/ha/alarm_mode` retain). Predictor subscreve `tucuxi/ha/alarm_mode` e condiciona P(evento | modo). `switch` ↔ `alarm_control_panel` sincronizados por automação bidirecional (§5.8).
 - Fallback: se `tucuxi/ha/alarm_mode` stale (>60s) ou HA offline, predictor assume **último modo armado** (fail-secure) e loga; nunca assume `disarmed` por ausência de mensagem.
 
 Exemplo viagem:
@@ -302,6 +303,30 @@ Mapeamento: `disarmed` = alarme desarmado (rotina leve); `armed_home` = alarme a
 
 Armazenado em `predictor/config/entity_map.json` (submodule) ou `PREDICTOR_ENTITY_MAP` env (JSON). Editável via `PUT /api/predictor/map` (futuro).
 
+### 5.8 Switch virtual de modo para voz (HA ↔ Predictor)
+
+Dois MQTT switches com discovery (retain) — espelho do `alarm_control_panel`, sem PIN, expostos para Alexa/Google/Assist:
+
+| Entidade | ON | OFF | Tópicos |
+|---|---|---|---|
+| `switch.tucuxi_alarme` | `armed_home` (alarme armado) | `disarmed` | `tucuxi/mode/alarme/set` (cmd) / `tucuxi/mode/alarme/state` (state) |
+| `switch.tucuxi_viagem` | `armed_away` (viagem) | volta ao anterior | `tucuxi/mode/viagem/set` / `tucuxi/mode/viagem/state` |
+
+Discovery (publicado pelo predictor/Tucuxi, mesmo padrão de `mqtt_register_device` em `src/alerts.py:313`):
+
+```json
+// homeassistant/switch/tucuxi_alarme/config (retain)
+{"name": "Tucuxi Alarme", "command_topic": "tucuxi/mode/alarme/set",
+ "state_topic": "tucuxi/mode/alarme/state", "payload_on": "ON", "payload_off": "OFF",
+ "unique_id": "tucuxi_alarme", "icon": "mdi:shield"}
+```
+
+Sincronia bidirecional (automação HA, `mode: single`):
+- `switch.tucuxi_alarme ON` → `alarm_control_panel.alarm_arm_home` + `tucuxi/ha/alarm_mode {armed_home}`.
+- `alarm_control_panel → armed_home` → publica `ON` em `tucuxi/mode/alarme/state`.
+- `switch.tucuxi_viagem ON` tem prioridade (override); OFF volta ao estado do alarme.
+- Voz: *"ligar alarme"*, *"desligar alarme"*, *"ativar modo viagem"* — sem código, pois é switch e não alarme com PIN. PIN continua exigido se armar pelo `alarm_control_panel` direto.
+
 ---
 
 ## 6. Abordagens possíveis (trade-offs) — P1 RESOLVIDA: submodule
@@ -410,12 +435,16 @@ Ex: rosa (cam 2, zona rosa) + alarm=armed → turn_on switch.aspersor_rosa durat
 | `tucuxi/predictions/{slug}` | Preditor → HA | true | 0 | predição v1 |
 | `tucuxi/predictions/{slug}/available` | Preditor → HA | true | 1 | birth/will |
 | `tucuxi/feedback/{slug}` | HA → Preditor | false | 0 | aceitar/recusar |
-| `tucuxi/ha/alarm_mode` | HA → Preditor | true | 0 | armed/disarmed |
+| `tucuxi/ha/alarm_mode` | HA → Preditor | true | 0 | disarmed/armed_home/armed_away + modo_tucuxi |
+| `tucuxi/mode/alarme/set` | HA/voz → Preditor | false | 0 | ON/OFF (switch virtual alarme) |
+| `tucuxi/mode/alarme/state` | Preditor → HA | true | 0 | ON/OFF (retain, voz lê aqui) |
+| `tucuxi/mode/viagem/set` | HA/voz → Preditor | false | 0 | ON/OFF (switch virtual viagem) |
+| `tucuxi/mode/viagem/state` | Preditor → HA | true | 0 | ON/OFF (retain) |
 | `tucuxi/automation/actuator` | Preditor → HA | false | 0 | turn_on + target_entity + duration_sec (generaliza sirene) |
 | `secur/automation/siren` | Tucuxi → HA | false | 0 | siren legado (`SIREN_MQTT_TOPIC`) |
 | `secur/{id}/state` | Tucuxi → HA | true | 0 | motion/idle (existente) |
 
-Auto-discovery HA para predição: publicar `homeassistant/sensor/tucuxi_{slug}_prediction/config` com `state_topic: tucuxi/predictions/{slug}`.
+Auto-discovery HA para predição: publicar `homeassistant/sensor/tucuxi_{slug}_prediction/config` com `state_topic: tucuxi/predictions/{slug}`. Para voz: `homeassistant/switch/tucuxi_alarme/config` + `homeassistant/switch/tucuxi_viagem/config` (§5.8).
 
 ---
 
