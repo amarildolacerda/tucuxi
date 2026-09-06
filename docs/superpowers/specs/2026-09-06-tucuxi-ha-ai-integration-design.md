@@ -111,6 +111,30 @@ HA: suggester propõe "Detectamos padrão na rosa 19h. Criar: se alarme armado +
 - Mapeamento configurável **zona/câmera Tucuxi → entidade HA** (ex: `rosa → binary_sensor.presenca_rosa` e `switch.aspersor_rosa`) — tabela `predictor_entity_map` no submodule.
 - Atuação com **timer auto-off** (HA `delay` ou `tucuxi/automation/actuator` com `duration_sec: 300`). Generaliza `siren_handler` (`src/alerts.py:215`) para atuador genérico.
 
+### 4.4 Modos de operação (requisito 2026-09-06)
+
+Dois modos, mapeados para `alarm_control_panel` nativo do HA (sem entidade custom):
+
+| Modo Tucuxi | Estado HA | Quando usar | Comportamento |
+|---|---|---|---|
+| **Alarme desarmado** | `disarmed` | Em casa, rotina normal | Monitoramento leve: só eventos críticos (`intruder`, `fall`, `loitering`) geram alerta; atuadores (aspersor) **não** disparam; predição continua aprendendo mas não sugere |
+| **Alarme armado** | `armed_home` | Presente, mas com pontos de segurança ativos | Monitora pontos de segurança mapeados (ex: rosa): movimento → atua (aspersor 5min) + alerta; demais zonas só registram |
+| **Viagem** | `armed_away` | Casa vazia | **Qualquer ponto alerta** (sensibilidade máxima, sem filtro de zona) + **simulação de presença** (luzes ligam/desligam por rotina aprendida) + notificação imediata Telegram/HA |
+
+Detalhes:
+- **Alarme armado (presente):** evita disparo contra morador — só zonas `segurança/privativa` no `entity_map` com `alarm_required: true` atuam. Ex: rosa → aspersor; portão → luz; quintal interno ignora.
+- **Viagem:** `suggester` suprimido (sem "deseja automatizar?"); tudo vira ação direta. Simulação de presença usa `tucuxi/predictions/+` invertido: publica `tucuxi/automation/actuator` para `light.*` nos horários de maior P(movimento) histórico — parece que há gente em casa.
+- Troca de modo: usuário arma/desarma no HA (`alarm_control_panel`) ou dashboard Tucuxi (`PUT /api/mode` futuro → espelha em `tucuxi/ha/alarm_mode` retain). Predictor subscreve e condiciona P(evento | modo).
+- Fallback: se `tucuxi/ha/alarm_mode` stale (>60s) ou HA offline, predictor assume **último modo armado** (fail-secure) e loga; nunca assume `disarmed` por ausência de mensagem.
+
+Exemplo viagem:
+```
+HA: alarm = armed_away → tucuxi/ha/alarm_mode {alarm_mode: armed_away}
+Tucuxi cam quintal (zona pública, normalmente ignorada) —motion→ tucuxi/camera/quintal/event
+→ modo viagem: publica tucuxi/automation/actuator {target: light.sala, action: turn_on, duration_sec: 1800}
+→ Telegram: "Movimento quintal em modo viagem 22:14 + luz sala ligada (simulação)"
+```
+
 ---
 
 ## 5. Modelo de dados / Formato de mensagens
@@ -241,15 +265,15 @@ automation:
 
 Alternativa REST (já existente `HOME_ASSISTANT_URL`/`HOME_ASSISTANT_TOKEN` — `docs/technical.md:160`): `POST /api/services/switch/turn_on` direto do predictor quando `PREDICTOR_HA_DIRECT_ACTION=true` (opt-in).
 
-### 5.6 Estado do HA → Preditor (para predição condicional)
+### 5.6 Estado do HA → Preditor (modo de operação)
 
 Tópico: `tucuxi/ha/alarm_mode` (retain, HA publica; predictor subscreve) ou polling `GET /api/states/alarm_control_panel.tucuxi`
 
 ```json
-{"alarm_mode": "armed_away|armed_home|disarmed", "timestamp": "2026-09-05T18:00:00-03:00"}
+{"alarm_mode": "disarmed|armed_home|armed_away", "modo_tucuxi": "alarme_desarmado|alarme_armado|viagem", "timestamp": "2026-09-05T18:00:00-03:00"}
 ```
 
-Permite P(movimento | hora, alarm_mode) e suprimir sugestão quando desarmado.
+Mapeamento: `disarmed` = alarme desarmado (rotina leve); `armed_home` = alarme armado presente (pontos de segurança ativos, ex: rosa → aspersor); `armed_away` = viagem (tudo alerta + simulação de presença). Ver matriz §4.4. Permite P(movimento | hora, modo) e suprimir sugestão quando desarmado; em viagem, sugestão vira ação direta.
 
 ### 5.7 Mapeamento zona/câmera → entidade HA (config do submodule)
 
@@ -260,7 +284,18 @@ Permite P(movimento | hora, alarm_mode) e suprimir sugestão quando desarmado.
     "ha_sensor": "binary_sensor.presenca_rosa",
     "ha_actuator": "switch.aspersor_rosa",
     "default_duration_sec": 300,
-    "alarm_required": true
+    "alarm_required": true,
+    "modos_ativos": ["alarme_armado", "viagem"],
+    "acao_viagem": "alertar_e_atuar"
+  },
+  "quintal": {
+    "camera_id": 3,
+    "ha_sensor": "binary_sensor.presenca_quintal",
+    "ha_actuator": "light.sala",
+    "default_duration_sec": 1800,
+    "alarm_required": false,
+    "modos_ativos": ["viagem"],
+    "acao_viagem": "simular_presenca"
   }
 }
 ```
@@ -386,8 +421,8 @@ Auto-discovery HA para predição: publicar `homeassistant/sensor/tucuxi_{slug}_
 
 ## 9. Roadmap incremental (alinhado ao `docs/roadmap.md`) — com submodule + atuadores HA
 
-1. **MVP (2-3 semanas):** criar repo `tucuxi-predictor` + `git submodule add src/predictor` + Tucuxi publica `tucuxi/camera/+/event` v1 + Preditor EWMA (embalagem A) + `tucuxi/predictions/+` + HA `mqtt.sensor` manual. **Sem sugestão automática, mas já com `actuator.py` para o caso "rosa → aspersor 5min" via `tucuxi/automation/actuator` (generaliza sirene).**
-2. **V2 (predição robusta + alarme):** histograma dia_semana, `confianca_modelo`, `expira_em`, threshold por câmera/zona (`src/config.py: PREDICTION_THRESHOLD`), `GET /predictions` para debug + `ha_client.py` lê `tucuxi/ha/alarm_mode` (ou REST) para P(evento | alarm_mode); `entity_map.json` para rosa→aspersor.
+1. **MVP (2-3 semanas):** criar repo `tucuxi-predictor` + `git submodule add src/predictor` + Tucuxi publica `tucuxi/camera/+/event` v1 + Preditor EWMA (embalagem A) + `tucuxi/predictions/+` + HA `mqtt.sensor` manual + **modos §4.4** (`tucuxi/ha/alarm_mode` + `entity_map.modos_ativos`). **Sem sugestão automática, mas já com `actuator.py` para "rosa → aspersor 5min" (alarme armado) e simulação de presença básica (viagem) via `tucuxi/automation/actuator`.**
+2. **V2 (predição robusta + modos):** histograma dia_semana, `confianca_modelo`, `expira_em`, threshold por câmera/zona/modo (`src/config.py: PREDICTION_THRESHOLD`), `GET /predictions?modo=` para debug + `ha_client.py` lê `tucuxi/ha/alarm_mode` (ou REST) para P(evento | modo); `entity_map.json` com `acao_viagem` por zona.
 3. **V3 (sugestão acionável):** `suggester.py` + `persistent_notification` + `tucuxi/feedback`; cooldown (`ALERT_COOLDOWN_*`); blueprint HA "Tucuxi: sensor → atuador com duração"; **embalagem B** (`services/predictor/`) e **addon HA** como distribuição alternativa da mesma lib.
 4. **V4 (extensões):** agrícola/energia, 80 câmeras (preditor na central N3/N4 de `architecture-80-cameras.md`), opt-in cloud.
 
@@ -452,6 +487,7 @@ Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do su
 | P6 | Retenção para treino | 7 dias vs. 30 dias vs. configurável `PREDICTOR_HISTORY_DAYS` | Precisão vs. disco | Dev | V1 |
 | P7 | Notificação sugestiva vs. criação automática | só notifica vs. cria automação rascunho vs. cria direto | Risco de automação indesejada | Produto/LGPD | V3 |
 | P8 | Nome da marca em tópicos/entidades | `tucuxi` vs. `secur` | Branding | Branding | antes do plano |
+| P9 | Fail-secure sem HA | assumir último armado vs. desarmado vs. pausar atuação | Segurança em queda de rede | Arquitetura | V1 |
 
 **Critério de desempate (AGENTS.md):** priorizar valor perceptível + menor custo + operação 100% local.
 
