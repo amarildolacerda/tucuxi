@@ -70,9 +70,10 @@ Transformar o Tucuxi em motor distribuído:
 - Roda modelos leves: (1) série temporal por câmera/zona/hora, (2) classificador probabilístico por tipo de evento.
 - Publica sensores virtuais em MQTT em intervalo fixo (ex: a cada 5-15 min) + sob demanda após evento.
 
-**C. Home Assistant (consumidor)**
+**C. Home Assistant (consumidor + orquestrador de atuadores)**
 - `mqtt.sensor` / `mqtt.binary_sensor` para predição + `mqtt.device_automation` ou `persistent_notification` interativa para sugestão.
 - Automação criada só após aceite explícito do usuário (sem auto-criação silenciosa).
+- **Integração com sensores e atuadores HA:** predictor lê estado do HA (ex: `alarm_control_panel`, `binary_sensor.presenca_rosa`) e propõe/executa ação em atuador mapeado (ex: `switch.aspersor_rosa` por 5 min). Ver §4.3 exemplo concreto.
 
 ### 4.2 Fluxo de dados
 
@@ -85,6 +86,30 @@ Transformar o Tucuxi em motor distribuído:
 6. Ação: Usuário aceita → HA cria automação (trigger: sensor predicao > 0.7 + condição horária);
          recusa → feedback volta ao preditor (tucuxi/feedback) para ajustar threshold
 ```
+
+### 4.3 Exemplo concreto — sensor + câmera + atuador (requisito 2026-09-06)
+
+> **Regra:** *Se modo alarme = armado E sensor de presença "rosa" (câmera/zona Tucuxi) detectar movimento → ligar aspersor do jardim "aspersor rosa" por 5 minutos.*
+
+Fluxo reativo (sem predição, valor imediato):
+```
+Tucuxi (zona rosa, cam 2) —motion→ tucuxi/camera/rosa/event {event_type: motion_detected}
+HA: automation trigger = state tucuxi/camera/rosa/event + condition alarm_control_panel = armed
+HA: action = switch.turn_on aspersor_rosa + delay 5min + switch.turn_off
+```
+
+Fluxo preditivo (proativo, com submodule):
+```
+Preditor (submodule) lê histórico rosa → P(movimento 19h) = 0.78
+→ publica tucuxi/predictions/rosa {prob 0.78, janela 19:00-20:00}
+HA: suggester propõe "Detectamos padrão na rosa 19h. Criar: se alarme armado + movimento rosa → aspersor 5min?"
+→ usuário aceita → HA cria automação (blueprint Tucuxi) vinculada a switch.aspersor_rosa
+```
+
+**O que o predictor precisa enxergar para isso:**
+- Estado do alarme (HA → `tucuxi/ha/alarm_mode` via MQTT ou `GET /api/states/alarm_control_panel.*` com `HOME_ASSISTANT_TOKEN` — `src/alerts.py:176`).
+- Mapeamento configurável **zona/câmera Tucuxi → entidade HA** (ex: `rosa → binary_sensor.presenca_rosa` e `switch.aspersor_rosa`) — tabela `predictor_entity_map` no submodule.
+- Atuação com **timer auto-off** (HA `delay` ou `tucuxi/automation/actuator` com `duration_sec: 300`). Generaliza `siren_handler` (`src/alerts.py:215`) para atuador genérico.
 
 ---
 
@@ -176,6 +201,72 @@ Tópico: `tucuxi/feedback/{camera_slug}`
 
 Usado para aprendizado (ajustar threshold, suprimir sugestão repetida).
 
+### 5.5 Atuação genérica (Preditor/Tucuxi → HA) — generaliza sirene
+
+Tópico: `tucuxi/automation/actuator` (ou `secur/automation/siren` legado para sirene — `src/alerts.py:215`, `SIREN_MQTT_TOPIC`)
+
+```json
+{
+  "schema_version": 1,
+  "action": "turn_on",
+  "camera": "rosa",
+  "zone": "rosa",
+  "event_type": "motion_detected",
+  "target_entity": "switch.aspersor_rosa",
+  "duration_sec": 300,
+  "condition": {"alarm_mode": "armed"},
+  "event_id": "uuid-hex",
+  "timestamp": "2026-09-05T19:02:00-03:00"
+}
+```
+
+HA consome com automação MQTT trigger:
+
+```yaml
+automation:
+  - alias: "Tucuxi rosa → aspersor"
+    trigger:
+      - platform: mqtt
+        topic: tucuxi/automation/actuator
+    condition:
+      - condition: template
+        value_template: "{{ trigger.payload_json.target_entity == 'switch.aspersor_rosa' and trigger.payload_json.condition.alarm_mode == 'armed' }}"
+    action:
+      - service: switch.turn_on
+        target: { entity_id: "{{ trigger.payload_json.target_entity }}" }
+      - delay: "{{ trigger.payload_json.duration_sec }}"
+      - service: switch.turn_off
+        target: { entity_id: "{{ trigger.payload_json.target_entity }}" }
+```
+
+Alternativa REST (já existente `HOME_ASSISTANT_URL`/`HOME_ASSISTANT_TOKEN` — `docs/technical.md:160`): `POST /api/services/switch/turn_on` direto do predictor quando `PREDICTOR_HA_DIRECT_ACTION=true` (opt-in).
+
+### 5.6 Estado do HA → Preditor (para predição condicional)
+
+Tópico: `tucuxi/ha/alarm_mode` (retain, HA publica; predictor subscreve) ou polling `GET /api/states/alarm_control_panel.tucuxi`
+
+```json
+{"alarm_mode": "armed_away|armed_home|disarmed", "timestamp": "2026-09-05T18:00:00-03:00"}
+```
+
+Permite P(movimento | hora, alarm_mode) e suprimir sugestão quando desarmado.
+
+### 5.7 Mapeamento zona/câmera → entidade HA (config do submodule)
+
+```json
+{
+  "rosa": {
+    "camera_id": 2,
+    "ha_sensor": "binary_sensor.presenca_rosa",
+    "ha_actuator": "switch.aspersor_rosa",
+    "default_duration_sec": 300,
+    "alarm_required": true
+  }
+}
+```
+
+Armazenado em `predictor/config/entity_map.json` (submodule) ou `PREDICTOR_ENTITY_MAP` env (JSON). Editável via `PUT /api/predictor/map` (futuro).
+
 ---
 
 ## 6. Abordagens possíveis (trade-offs) — P1 RESOLVIDA: submodule
@@ -214,7 +305,7 @@ Usado para aprendizado (ajustar threshold, suprimir sugestão repetida).
 
 ---
 
-## 7. Arquitetura sugerida — submodule desacoplado
+## 7. Arquitetura sugerida — submodule desacoplado (com integração HA sensores/atuadores)
 
 ```
 tucuxi/                          # repo principal
@@ -229,6 +320,9 @@ tucuxi/                          # repo principal
         publisher.py             # publica tucuxi/predictions/+ via MQTT
         suggester.py             # decide se notifica HA (threshold + cooldown + feedback)
         schemas.py               # dataclasses + validação schema_version
+        ha_client.py             # lê estado HA (alarm_mode, sensor) via MQTT/REST
+        entity_map.py            # mapeamento zona/câmera → entidade HA (rosa → aspersor)
+        actuator.py              # publica tucuxi/automation/actuator (generaliza siren_handler)
       tests/
   services/predictor/            # embalagem B (opcional, reusa submodule)
     Dockerfile
@@ -251,22 +345,23 @@ paho-mqtt
 Princípios (AGENTS.md):
 - **Submodule com contrato estável:** Tucuxi e HA dependem de tópicos MQTT (`§5, §8`) e `schemas.py`, não de internals. Trocar embalagem não quebra.
 - Cada unidade com uma responsabilidade, interface bem definida, testável isolada (`pytest` dentro do submodule, CI próprio).
-- Preditor não conhece HA; só publica MQTT. HA decide UI/automação.
+- **Preditor integrado ao HA mas sem acoplamento forte:** `ha_client.py` lê `tucuxi/ha/alarm_mode` (MQTT retain) ou REST `HOME_ASSISTANT_TOKEN`; `actuator.py` generaliza `siren_handler` (`src/alerts.py:215`) para qualquer `target_entity` + `duration_sec`. HA continua orquestrador final (pode ignorar comando se condição não bater).
 - `AlertRuleEngine` existente continua para eventos reativos; preditor é paralelo, não substitui.
 - Versionamento: `tucuxi` referencia `predictor` por tag (`git submodule update --remote` + `APP_VERSION` em `src/config.py` para log).
 
-Diagrama lógico:
+Diagrama lógico (com sensores/atuadores HA):
 
 ```
 [Camera workers] → [EventQueue] → [AlertRuleEngine] → handlers (MQTT/HA/Telegram)
                       ↓
                  [Predictor Store] → [EWMA Model] → [Publisher] → MQTT tucuxi/predictions/+
                       ↑                                      ↓
-                 [SQLite events]                      [HA mqtt.sensor]
-                                                         ↓
-                                                   [Suggester] → persistent_notification
+                 [SQLite events]                      [HA mqtt.sensor + suggester]
+                      ↑                                      ↓
+[HA alarm_mode/sensor] → [ha_client + entity_map] → [actuator] → MQTT tucuxi/automation/actuator → HA switch.aspersor_rosa (5min)
                                                          ↓
                                                    [feedback] → tucuxi/feedback/+
+Ex: rosa (cam 2, zona rosa) + alarm=armed → turn_on switch.aspersor_rosa duration 300s
 ```
 
 ---
@@ -280,20 +375,23 @@ Diagrama lógico:
 | `tucuxi/predictions/{slug}` | Preditor → HA | true | 0 | predição v1 |
 | `tucuxi/predictions/{slug}/available` | Preditor → HA | true | 1 | birth/will |
 | `tucuxi/feedback/{slug}` | HA → Preditor | false | 0 | aceitar/recusar |
+| `tucuxi/ha/alarm_mode` | HA → Preditor | true | 0 | armed/disarmed |
+| `tucuxi/automation/actuator` | Preditor → HA | false | 0 | turn_on + target_entity + duration_sec (generaliza sirene) |
+| `secur/automation/siren` | Tucuxi → HA | false | 0 | siren legado (`SIREN_MQTT_TOPIC`) |
 | `secur/{id}/state` | Tucuxi → HA | true | 0 | motion/idle (existente) |
 
 Auto-discovery HA para predição: publicar `homeassistant/sensor/tucuxi_{slug}_prediction/config` com `state_topic: tucuxi/predictions/{slug}`.
 
 ---
 
-## 9. Roadmap incremental (alinhado ao `docs/roadmap.md`) — com submodule
+## 9. Roadmap incremental (alinhado ao `docs/roadmap.md`) — com submodule + atuadores HA
 
-1. **MVP (2-3 semanas):** criar repo `tucuxi-predictor` + `git submodule add src/predictor` + Tucuxi publica `tucuxi/camera/+/event` v1 + Preditor EWMA (embalagem A) + `tucuxi/predictions/+` + HA `mqtt.sensor` manual. Sem sugestão automática.
-2. **V2 (predição robusta):** histograma dia_semana, `confianca_modelo`, `expira_em`, threshold por câmera/zona (`src/config.py: PREDICTION_THRESHOLD`), `GET /predictions` para debug. Mesma lib, sem nova embalagem.
-3. **V3 (sugestão acionável):** `suggester.py` + `persistent_notification` + `tucuxi/feedback`; cooldown (`ALERT_COOLDOWN_*`); **embalagem B** (`services/predictor/`) e **addon HA** como distribuição alternativa da mesma lib.
+1. **MVP (2-3 semanas):** criar repo `tucuxi-predictor` + `git submodule add src/predictor` + Tucuxi publica `tucuxi/camera/+/event` v1 + Preditor EWMA (embalagem A) + `tucuxi/predictions/+` + HA `mqtt.sensor` manual. **Sem sugestão automática, mas já com `actuator.py` para o caso "rosa → aspersor 5min" via `tucuxi/automation/actuator` (generaliza sirene).**
+2. **V2 (predição robusta + alarme):** histograma dia_semana, `confianca_modelo`, `expira_em`, threshold por câmera/zona (`src/config.py: PREDICTION_THRESHOLD`), `GET /predictions` para debug + `ha_client.py` lê `tucuxi/ha/alarm_mode` (ou REST) para P(evento | alarm_mode); `entity_map.json` para rosa→aspersor.
+3. **V3 (sugestão acionável):** `suggester.py` + `persistent_notification` + `tucuxi/feedback`; cooldown (`ALERT_COOLDOWN_*`); blueprint HA "Tucuxi: sensor → atuador com duração"; **embalagem B** (`services/predictor/`) e **addon HA** como distribuição alternativa da mesma lib.
 4. **V4 (extensões):** agrícola/energia, 80 câmeras (preditor na central N3/N4 de `architecture-80-cameras.md`), opt-in cloud.
 
-Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do submodule com `version` espelhada em tag Git.
+Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do submodule com `version` espelhada em tag Git. Exemplo "rosa" entra no MVP como teste de integração fim-a-fim.
 
 ---
 
@@ -313,6 +411,8 @@ Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do su
 - **Falsos positivos de predição:** usuário desacredita. Mitigar com `confianca_modelo` + `amostras` visíveis + threshold alto (0.75) + cooldown 24h por sugestão.
 - **HA desatualizado (retain):** predição expirada mostra valor stale. Mitigar com `expira_em` e HA template que mostra `unavailable` após expiração.
 - **Schema drift:** dois tópicos de evento (legado + novo) divergem. Mitigar com conversor único `to_enriched_event()` e testes de contrato.
+- **Atuador preso ligado (aspersor):** falha no `delay`/`turn_off` deixa jardim alagado. Mitigar com HA `timer` + `retain` + `availability` e comando idempotente com `duration_sec`; predictor publica também `turn_off` agendado e HA usa `mode: single` + `timeout`.
+- **Alarme dessincronizado:** predictor age com `alarm_mode` stale. Mitigar com `tucuxi/ha/alarm_mode` retain + LWT, e checar `timestamp` < 60s antes de atuar.
 
 ---
 
@@ -359,8 +459,8 @@ Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do su
 
 ## 15. Próximos passos para aprovar este design
 
-1. Responder D1-D7 e decidir P1-P8 (tabela acima) — sem isso o plano ficará com `TBD`.
-2. Validar tópicos/payloads com um HA de teste (Mosquitto + `mqtt.sensor` manual).
+1. Responder D1-D7 e decidir P2-P8 (P1 já decidida: submodule — ver §6) — sem isso o plano ficará com `TBD`.
+2. Validar tópicos/payloads com um HA de teste (Mosquitto + `mqtt.sensor` manual + caso "rosa → aspersor 5min" §4.3).
 3. Se aprovado, invocar `superpowers:writing-plans` para gerar plano com tasks 2-5 min (arquivos, testes, env vars).
 
 ---
