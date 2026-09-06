@@ -136,6 +136,44 @@ Tucuxi cam quintal (zona pública, normalmente ignorada) —motion→ tucuxi/cam
 → Telegram: "Movimento quintal em modo viagem 22:14 + luz sala ligada (simulação)"
 ```
 
+### 4.5 Composição do sistema + dissuasão perimetral (requisito 2026-09-06)
+
+Objetivo: **dispersar o intruso antes do ambiente interno** — agir nas camadas externas com dissuasão progressiva, não só alertar quando já entrou.
+
+**Camadas de defesa:**
+
+```
+[L0 entorno/rua] → [L1 perímetro (muro/portão)] → [L2 pontos de segurança (rosa, lateral, fundos)] → [L3 ambiente interno (porta/sala)]
+     observar            detectar + dissuadir leve              dissuadir forte                    alarme total
+```
+
+**Sensores por camada (Tucuxi + HA):**
+
+| Camada | Visão (Tucuxi) | Sensores HA (MQTT) | Atuadores de dissuasão |
+|---|---|---|---|
+| L1 perímetro | câmera portão/muro (YOLO pessoa/veículo) | PIR externo, beam infravermelho, contato de portão, LUX | luz perimetral ON, bip curto |
+| L2 pontos de segurança | câmera rosa/lateral/fundos (zona segurança/privativa) | PIR + mmWave presença, contato janela lateral, vibração em grade | **irrigação/aspersor 5min** + sirene curta + holofote |
+| L3 interno | câmera interna (privacidade: só em viagem/armado) | PIR interno, contato porta, sensor de vidro, fumaça/CO | sirene total + luzes + notificação + (futuro: fechadura) |
+
+O que mais pode compor (backlog, mesmo barramento MQTT):
+- Beam duplo perimetral (cerca virtual, menos falso-positivo que PIR sozinho).
+- mmWave (presença parada — PIR falha com intruso imóvel).
+- Sensor de vibração/quebra de vidro e contato de porta/janela (cruzam com visão: câmera diz "pessoa", contato diz "porta aberta" → confiança alta).
+- LUX + clima (não ligar holofote de dia; não irrigar se chovendo — `weather.*` como inibidor).
+- Áudio: buzzer/sirene TTS ("você está sendo filmado") como dissuasão verbal antes da sirene total.
+
+**Escada de dissuasão (exemplo intruso vindo da rua):**
+1. L1 (portão, 19:02): pessoa detectada → luz perimetral ON 10min + registra. Sem notificação (evita spam).
+2. L2 (rosa, 19:04): cruzou ponto de segurança com alarme armado → **aspersor rosa 5min** + holofote + Telegram "dissuasão ativada na rosa".
+3. L2 persistente (19:06, ainda presente/loitering): sirene curta 30s + TTS + `unknown/intruder` para HA.
+4. L3 (porta, 19:07): contato + câmera → alarme total (sirene contínua, todas as luzes, Telegram + HA crítico).
+
+Regras:
+- Cada avanço de camada exige **confirmação cruzada** quando possível (visão + sensor físico) — reduz falso-positivo do aspersor (não molhar entregador/gato).
+- Dissuasão L1-L2 **só com alarme armado ou viagem**; desarmado só observa (L1 registra, sem atuar).
+- Cooldown por camada (`ALERT_COOLDOWN_*` + `PREDICTOR_DETER_COOLDOWN_SEC` default 15min p/ irrigação) evita aspersor ligado a cada gato.
+- Inibidores: chuva (`weather`), dia claro (LUX alto → sem holofote), horário de visita/entrega conhecida (identidade reconhecida → nunca dissuade).
+
 ---
 
 ## 5. Modelo de dados / Formato de mensagens
@@ -297,6 +335,29 @@ Mapeamento: `disarmed` = alarme desarmado (rotina leve); `armed_home` = alarme a
     "alarm_required": false,
     "modos_ativos": ["viagem"],
     "acao_viagem": "simular_presenca"
+  },
+  "portao_l1": {
+    "camera_id": 1,
+    "layer": "L1_perimetro",
+    "ha_sensor": "binary_sensor.pir_portao",
+    "ha_actuator": "light.perimetral",
+    "default_duration_sec": 600,
+    "alarm_required": false,
+    "modos_ativos": ["alarme_armado", "viagem"],
+    "escalada": "luz_10min_sem_notificar"
+  },
+  "rosa_l2": {
+    "camera_id": 2,
+    "layer": "L2_seguranca",
+    "ha_sensor": "binary_sensor.presenca_rosa",
+    "ha_actuator": "switch.aspersor_rosa",
+    "default_duration_sec": 300,
+    "alarm_required": true,
+    "modos_ativos": ["alarme_armado", "viagem"],
+    "confirmacao_cruzada": ["camera", "pir"],
+    "inibidores": ["chuva", "identidade_conhecida"],
+    "escalada": "aspersor_5min__depois_sirene_30s",
+    "cooldown_sec": 900
   }
 }
 ```
@@ -450,7 +511,7 @@ Auto-discovery HA para predição: publicar `homeassistant/sensor/tucuxi_{slug}_
 
 ## 9. Roadmap incremental (alinhado ao `docs/roadmap.md`) — com submodule + atuadores HA
 
-1. **MVP (2-3 semanas):** criar repo `tucuxi-predictor` + `git submodule add src/predictor` + Tucuxi publica `tucuxi/camera/+/event` v1 + Preditor EWMA (embalagem A) + `tucuxi/predictions/+` + HA `mqtt.sensor` manual + **modos §4.4** (`tucuxi/ha/alarm_mode` + `entity_map.modos_ativos`). **Sem sugestão automática, mas já com `actuator.py` para "rosa → aspersor 5min" (alarme armado) e simulação de presença básica (viagem) via `tucuxi/automation/actuator`.**
+1. **MVP (2-3 semanas):** criar repo `tucuxi-predictor` + `git submodule add src/predictor` + Tucuxi publica `tucuxi/camera/+/event` v1 + Preditor EWMA (embalagem A) + `tucuxi/predictions/+` + HA `mqtt.sensor` manual + **modos §4.4** (`tucuxi/ha/alarm_mode` + `entity_map.modos_ativos`) + **dissuasão L1→L2 §4.5** (luz perimetral + aspersor rosa com confirmação câmera+PIR e inibidor chuva). **Sem sugestão automática, mas já com `actuator.py` para "rosa → aspersor 5min" (alarme armado) e simulação de presença básica (viagem) via `tucuxi/automation/actuator`.**
 2. **V2 (predição robusta + modos):** histograma dia_semana, `confianca_modelo`, `expira_em`, threshold por câmera/zona/modo (`src/config.py: PREDICTION_THRESHOLD`), `GET /predictions?modo=` para debug + `ha_client.py` lê `tucuxi/ha/alarm_mode` (ou REST) para P(evento | modo); `entity_map.json` com `acao_viagem` por zona.
 3. **V3 (sugestão acionável):** `suggester.py` + `persistent_notification` + `tucuxi/feedback`; cooldown (`ALERT_COOLDOWN_*`); blueprint HA "Tucuxi: sensor → atuador com duração"; **embalagem B** (`services/predictor/`) e **addon HA** como distribuição alternativa da mesma lib.
 4. **V4 (extensões):** agrícola/energia, 80 câmeras (preditor na central N3/N4 de `architecture-80-cameras.md`), opt-in cloud.
@@ -476,6 +537,7 @@ Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do su
 - **HA desatualizado (retain):** predição expirada mostra valor stale. Mitigar com `expira_em` e HA template que mostra `unavailable` após expiração.
 - **Schema drift:** dois tópicos de evento (legado + novo) divergem. Mitigar com conversor único `to_enriched_event()` e testes de contrato.
 - **Atuador preso ligado (aspersor):** falha no `delay`/`turn_off` deixa jardim alagado. Mitigar com HA `timer` + `retain` + `availability` e comando idempotente com `duration_sec`; predictor publica também `turn_off` agendado e HA usa `mode: single` + `timeout`.
+- **Dissuasão contra inocente (entregador, gato, morador):** aspersor/sirene disparam sem necessidade. Mitigar com confirmação cruzada (visão + PIR/beam), identidade conhecida como inibidor total, LUX/clima como inibidor parcial, e escada L1→L2→L3 (luz antes de água, água antes de sirene).
 - **Alarme dessincronizado:** predictor age com `alarm_mode` stale. Mitigar com `tucuxi/ha/alarm_mode` retain + LWT, e checar `timestamp` < 60s antes de atuar.
 
 ---
