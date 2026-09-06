@@ -190,7 +190,7 @@ lateral_leste (corredor E)     lateral_oeste (corredor O)
 lateral_sul (faixa S) — caixa_dagua (extremo S)
 ```
 
-Consequências: intrusão típica entra pelo **norte (portão)** e desce para leste (garagens) ou oeste (social); `lateral_norte` é o primeiro corredor após o portão; `lateral_sul` cobre fundos/caixa d'água. Vizinhança (§5.7b) segue essa adjacência real.
+Consequências: intrusão típica entra pelo **norte (portão)** e desce para leste (garagens) ou oeste (social); `lateral_norte` é o primeiro corredor após o portão; `lateral_sul` cobre fundos/caixa d'água. Vizinhança (§5.7b) segue essa adjacência real. Mapa visual: `2026-09-06-terreno-mapa.svg` (mesma pasta).
 
 20 ambientes (13 externos + 7 internos) mapeados para camada + classificação de zona Tucuxi (pública/segurança/privativa — `src/event_rules.py`, CRUD `/zones`):
 

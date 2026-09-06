@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="640" font-family="sans-serif">
+  <defs>
+    <style>
+      .t { font-size: 13px; font-weight: bold; fill: #1a1a1a; }
+      .s { font-size: 11px; fill: #444; }
+      .l1 { fill: #dbeafe; stroke: #2563eb; }
+      .l2 { fill: #ffedd5; stroke: #ea580c; }
+      .l3 { fill: #fee2e2; stroke: #dc2626; }
+      .soc { fill: #dcfce7; stroke: #16a34a; }
+      .util { fill: #f3f4f6; stroke: #6b7280; }
+    </style>
+  </defs>
+  <rect x="0" y="0" width="820" height="640" fill="#fff"/>
+  <text x="410" y="28" text-anchor="middle" font-size="16" font-weight="bold">Terreno — Norte em cima (portão N · social O · garagens L · caixa S)</text>
+  <text x="410" y="48" text-anchor="middle" font-size="12" fill="#666">L1 perímetro (azul) · L2 segurança (laranja) · L3 interno (vermelho) · social (verde)</text>
+
+  <!-- Bússola -->
+  <g transform="translate(770,90)">
+    <circle r="26" fill="#f8fafc" stroke="#94a3b8"/>
+    <text y="-6" text-anchor="middle" font-weight="bold">N</text>
+    <text y="16" text-anchor="middle" font-size="10">S</text>
+    <text x="-16" y="5" font-size="10">O</text>
+    <text x="16" y="5" font-size="10">L</text>
+  </g>
+
+  <!-- L1 portão norte -->
+  <rect class="l1" x="300" y="70" width="220" height="60" rx="8"/>
+  <text class="t" x="410" y="93" text-anchor="middle">1 · Portão entrada (N)</text>
+  <text class="s" x="410" y="110" text-anchor="middle">L1 · cam + PIR + beam + contato</text>
+
+  <!-- Lateral norte -->
+  <rect class="l2" x="300" y="140" width="220" height="55" rx="8"/>
+  <text class="t" x="410" y="161" text-anchor="middle">9 · Lateral norte</text>
+  <text class="s" x="410" y="178" text-anchor="middle">L1/L2 · PIR + beam + aspersor N</text>
+
+  <!-- Coluna leste: estacionamento, garagem, lateral leste -->
+  <rect class="l2" x="560" y="205" width="220" height="70" rx="8"/>
+  <text class="t" x="670" y="228" text-anchor="middle">4 · Estacionamento (L)</text>
+  <text class="s" x="670" y="245" text-anchor="middle">L2 · cam veículo + PIR</text>
+  <text class="s" x="670" y="260" text-anchor="middle">holofote + alerta</text>
+
+  <rect class="l2" x="560" y="285" width="220" height="70" rx="8"/>
+  <text class="t" x="670" y="308" text-anchor="middle">7 · Garagem (LESTE)</text>
+  <text class="s" x="670" y="325" text-anchor="middle">L2/L3 · cam + PIR + contato</text>
+  <text class="s" x="670" y="340" text-anchor="middle">luz + alerta (sem água)</text>
+
+  <rect class="l2" x="560" y="365" width="220" height="70" rx="8"/>
+  <text class="t" x="670" y="388" text-anchor="middle">8 · Lateral leste</text>
+  <text class="s" x="670" y="405" text-anchor="middle">corredor garagens · PIR + beam</text>
+  <text class="s" x="670" y="420" text-anchor="middle">aspersor leste 5min</text>
+
+  <!-- Casa / internos centro -->
+  <rect class="l3" x="300" y="205" width="220" height="230" rx="8"/>
+  <text class="t" x="410" y="228" text-anchor="middle">Casa — L3 interno</text>
+  <text class="s" x="410" y="246" text-anchor="middle">14 dorm rosa · 15 dorm azul</text>
+  <text class="s" x="410" y="262" text-anchor="middle">16 dorm master · 17 escritório</text>
+  <text class="s" x="410" y="278" text-anchor="middle">18 sala social · 19 cozinha</text>
+  <text class="s" x="410" y="294" text-anchor="middle">20 serviço · 6 entrada principal</text>
+  <text class="s" x="410" y="312" text-anchor="middle">sem cam padrão · PIR/mmWave</text>
+  <text class="s" x="410" y="328" text-anchor="middle">+ contato + fumaça/gás/água</text>
+  <text class="s" x="410" y="352" text-anchor="middle">2 · acesso jardim — 3 · rampa</text>
+  <text class="s" x="410" y="368" text-anchor="middle">L2 · PIR + mmWave/beam</text>
+  <text class="s" x="410" y="384" text-anchor="middle">aspersor jardim · luz rampa</text>
+  <text class="s" x="410" y="406" text-anchor="middle">6 · entrada principal (L3)</text>
+  <text class="s" x="410" y="422" text-anchor="middle">cam + identidade + TTS</text>
+
+  <!-- Coluna oeste: social, piscina, firepit, lateral oeste -->
+  <rect class="soc" x="40" y="205" width="220" height="70" rx="8"/>
+  <text class="t" x="150" y="228" text-anchor="middle">12 · Área social (O)</text>
+  <text class="s" x="150" y="245" text-anchor="middle">L3 social · cam + PIR</text>
+  <text class="s" x="150" y="260" text-anchor="middle">só luz (sem dissuasão)</text>
+
+  <rect class="soc" x="40" y="285" width="220" height="70" rx="8"/>
+  <text class="t" x="150" y="308" text-anchor="middle">13 · Piscina (O)</text>
+  <text class="s" x="150" y="325" text-anchor="middle">máscara + retenção seletiva</text>
+  <text class="s" x="150" y="340" text-anchor="middle">luz piscina (sem sirene)</text>
+
+  <rect class="soc" x="40" y="365" width="220" height="70" rx="8"/>
+  <text class="t" x="150" y="388" text-anchor="middle">5 · Firepit (O)</text>
+  <text class="s" x="150" y="405" text-anchor="middle">máscara fogo · PIR + calor</text>
+  <text class="s" x="150" y="420" text-anchor="middle">luz (sem água)</text>
+
+  <rect class="l2" x="40" y="445" width="220" height="55" rx="8"/>
+  <text class="t" x="150" y="466" text-anchor="middle">11 · Lateral oeste</text>
+  <text class="s" x="150" y="483" text-anchor="middle">corredor social · aspersor O</text>
+
+  <rect class="l2" x="300" y="445" width="220" height="55" rx="8"/>
+  <text class="t" x="410" y="466" text-anchor="middle">10 · Lateral sul</text>
+  <text class="s" x="410" y="483" text-anchor="middle">fundos · aspersor S</text>
+
+  <rect class="l2" x="560" y="445" width="220" height="55" rx="8"/>
+  <text class="t" x="670" y="462" text-anchor="middle" font-size="12">Leste ↔ garagem (vizinhos)</text>
+  <text class="s" x="670" y="480" text-anchor="middle">expansão §5.7b</text>
+
+  <!-- Caixa d'água sul -->
+  <rect class="util" x="300" y="510" width="220" height="60" rx="8"/>
+  <text class="t" x="410" y="533" text-anchor="middle">21 · Caixa d'água (S)</text>
+  <text class="s" x="410" y="550" text-anchor="middle">L1 · PIR + nível (sem aspersor)</text>
+
+  <!-- Fluxo intruso -->
+  <g stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#a)">
+    <defs><marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="none" stroke="#dc2626"/></marker></defs>
+    <path d="M410,130 L410,140" />
+    <path d="M300,240 L260,240 L260,320 L300,320" stroke-dasharray="5,4"/>
+    <path d="M520,240 L560,240" stroke-dasharray="5,4"/>
+    <path d="M410,435 L410,445" />
+    <path d="M410,500 L410,510" />
+  </g>
+  <text x="410" y="595" text-anchor="middle" font-size="12" fill="#333">Fluxo típico: portão (N) → lateral norte → leste (garagens) ou oeste (social) → sul (fundos/caixa) → casa (L3)</text>
+  <text x="410" y="615" text-anchor="middle" font-size="12" fill="#333">Escada: L1 luz → L2 aspersor/holofote → L2 persistente sirene → L3 alarme total (§4.5)</text>
+</svg>
