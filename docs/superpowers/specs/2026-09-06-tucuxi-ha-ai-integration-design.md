@@ -174,6 +174,32 @@ Regras:
 - Cooldown por camada (`ALERT_COOLDOWN_*` + `PREDICTOR_DETER_COOLDOWN_SEC` default 15min p/ irrigação) evita aspersor ligado a cada gato.
 - Inibidores: chuva (`weather`), dia claro (LUX alto → sem holofote), horário de visita/entrega conhecida (identidade reconhecida → nunca dissuade).
 
+### 4.6 Inventário de ambientes (requisito 2026-09-06)
+
+13 ambientes mapeados para camada + classificação de zona Tucuxi (pública/segurança/privativa — `src/event_rules.py`, CRUD `/zones`):
+
+| # | Ambiente | Slug | Camada | Classificação | Visão | Sensores HA | Dissuasão/atuador |
+|---|---|---|---|---|---|---|---|
+| 1 | Portão entrada | `portao_entrada` | L1 | segurança | cam pessoa/veículo | PIR externo, beam, contato portão, LUX | luz perimetral 10min, bip |
+| 2 | Acesso ao jardim | `acesso_jardim` | L2 | segurança | cam pessoa | PIR + mmWave | holofote + aspersor jardim 5min |
+| 3 | Rampa de acesso | `rampa` | L2 | segurança | cam pessoa/veículo | PIR, beam | luz rampa + sirene curta (persistente) |
+| 4 | Estacionamento | `estacionamento` | L2 | segurança | cam veículo/pessoa | PIR, contato cancela/garagem | holofote + alerta |
+| 5 | Firepit | `firepit` | L2/L3 social | segurança* | cam pessoa (máscara fogo p/ falso-positivo) | PIR, (futuro: calor/fumaça) | luz firepit, sem água |
+| 6 | Entrada principal | `entrada_principal` | L3 | privativa | cam pessoa + identidade | PIR, contato porta, campainha | luz entrada + TTS + sirene (persistente) |
+| 7 | Garagem | `garagem` | L2/L3 | segurança | cam veículo/pessoa | PIR, contato portão garagem | luz + alerta; sem aspersor |
+| 8 | Lateral leste | `lateral_leste` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor leste 5min |
+| 9 | Lateral norte | `lateral_norte` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor norte 5min |
+| 10 | Lateral sul | `lateral_sul` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor sul 5min |
+| 11 | Lateral oeste | `lateral_oeste` | L1/L2 | segurança | cam pessoa | PIR + beam | holofote + aspersor oeste 5min |
+| 12 | Área social | `area_social` | L3 social | pública* | cam pessoa (modo privacidade respeitado) | PIR, (somente presença) | luz social, sem dissuasão agressiva |
+| 13 | Piscina | `piscina` | L3 social | pública* | cam pessoa (máscara + retenção seletiva) | PIR, (futuro: sensor de queda na água) | luz piscina, sem aspersor/sirene direta |
+
+Notas:
+- `* Firepit/área social/piscina`: classificação `pública` dentro do lote (convivência) mas com regras próprias — dissuasão agressiva (aspersor/sirene) **desligada** por padrão para não molhar convidados; em **viagem** viram `segurança` (qualquer presença alerta). Privacidade: `mask_polygons` + `PRIVACY_MODE` (`docs/technical.md:208`) e retenção seletiva por zona valem aqui.
+- Laterais Leste/Norte/Sul/Oeste: mesma receita (PIR + beam + holofote + aspersor setorizado), só muda `slug` e `target_entity` (`switch.aspersor_leste` etc.) — permite confirmar direção do intruso (qual lateral cruzou primeiro).
+- Rosa (exemplo anterior) = instância de `acesso_jardim` ou lateral — manter `rosa` como slug operacional ou renomear para `acesso_jardim`; decidir em P10.
+- Cada ambiente = 1 zona Tucuxi (`/zones`) + 1 entrada no `entity_map` (§5.7) com `layer`, `modos_ativos`, `confirmacao_cruzada`, `inibidores`.
+
 ---
 
 ## 5. Modelo de dados / Formato de mensagens
@@ -579,6 +605,8 @@ Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do su
 | P7 | Notificação sugestiva vs. criação automática | só notifica vs. cria automação rascunho vs. cria direto | Risco de automação indesejada | Produto/LGPD | V3 |
 | P8 | Nome da marca em tópicos/entidades | `tucuxi` vs. `secur` | Branding | Branding | antes do plano |
 | P9 | Fail-secure sem HA | assumir último armado vs. desarmado vs. pausar atuação | Segurança em queda de rede | Arquitetura | V1 |
+| P10 | Slug `rosa` vs. inventário §4.6 | manter `rosa` como alias de `acesso_jardim` vs. renomear tudo | Compatibilidade entity_map/automações | Produto | V1 |
+| P11 | Câmeras em área social/piscina | 1 cam por ambiente vs. cam compartilhada vs. sem cam (só PIR) | Privacidade/LGPD, custo | Produto/LGPD | V1 |
 
 **Critério de desempate (AGENTS.md):** priorizar valor perceptível + menor custo + operação 100% local.
 
@@ -586,7 +614,7 @@ Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do su
 
 ## 15. Próximos passos para aprovar este design
 
-1. Responder D1-D7 e decidir P2-P8 (P1 já decidida: submodule — ver §6) — sem isso o plano ficará com `TBD`.
+1. Responder D1-D7 e decidir P2-P11 (P1 já decidida: submodule — ver §6) — sem isso o plano ficará com `TBD`.
 2. Validar tópicos/payloads com um HA de teste (Mosquitto + `mqtt.sensor` manual + caso "rosa → aspersor 5min" §4.3).
 3. Se aprovado, invocar `superpowers:writing-plans` para gerar plano com tasks 2-5 min (arquivos, testes, env vars).
 
