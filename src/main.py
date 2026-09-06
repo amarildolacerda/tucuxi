@@ -706,6 +706,28 @@ def main():
     event_bus.subscribe(alert_engine.handle)
     event_bus.start()
 
+    # Preditor MVP (embalagem A): gated by PREDICTOR_ENABLED, O(1) per event.
+    from .config import PREDICTOR_ENABLED, PREDICTOR_INTERVAL_SECONDS
+    if PREDICTOR_ENABLED:
+        from .predictor.predictor.loop import PredictorLoop
+        from .config import MQTT_BROKER_URL, MQTT_BROKER_PORT, MQTT_USERNAME, MQTT_PASSWORD
+        _predictor = PredictorLoop(MQTT_BROKER_URL, MQTT_BROKER_PORT,
+                                   {"username": MQTT_USERNAME, "password": MQTT_PASSWORD})
+        event_bus.subscribe(_predictor.on_event)
+
+        def _predictor_ticker():
+            import threading
+            from datetime import datetime as _dt
+            while True:
+                try:
+                    _predictor.tick(_dt.now().astimezone().hour)
+                except Exception:
+                    pass
+                threading.Event().wait(PREDICTOR_INTERVAL_SECONDS)
+
+        import threading as _th
+        _th.Thread(target=_predictor_ticker, daemon=True).start()
+
     # Register device with HA via MQTT auto-discovery
     cameras = storage.list_cameras()
     mqtt_register_device(cameras)
