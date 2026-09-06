@@ -410,6 +410,31 @@ Mapeamento: `disarmed` = alarme desarmado (rotina leve); `armed_home` = alarme a
 
 Armazenado em `predictor/config/entity_map.json` (submodule) ou `PREDICTOR_ENTITY_MAP` env (JSON). Editável via `PUT /api/predictor/map` (futuro).
 
+### 5.7b Agrupamento de sensores por área (requisito 2026-09-06)
+
+Cada ambiente (§4.6) é um **grupo**: 1+ câmeras + N sensores físicos + 1+ atuadores, todos sob o mesmo `slug`. Isso permite localizar o sensor mais próximo do evento e confirmar de forma cruzada.
+
+```json
+{
+  "area": "lateral_leste",
+  "slugs": ["lateral_leste"],
+  "cameras": ["cam_lateral_leste"],
+  "sensores": [
+    {"entity": "binary_sensor.pir_leste_1", "tipo": "pir", "posicao": "inicio_corredor"},
+    {"entity": "binary_sensor.beam_leste", "tipo": "beam", "posicao": "meio_corredor"},
+    {"entity": "binary_sensor.mmwave_leste", "tipo": "mmwave", "posicao": "fim_corredor"}
+  ],
+  "atuadores": ["light.holofote_leste", "switch.aspersor_leste"],
+  "vizinhos": ["portao_entrada", "lateral_norte"]
+}
+```
+
+Regras:
+- **Resolução por proximidade:** evento de câmera busca primeiro os sensores do **mesmo grupo** (`area`); se nenhum confirmou em ≤5s, expande para `vizinhos` (ordem de adjacência física). Ex: cam `lateral_leste` → checa `pir_leste_1` → depois `beam_leste` → depois `portao_entrada`.
+- **Espelho na `area` do HA:** cada grupo vira `area` no HA (`area_id: lateral_leste`) — sensores/câmeras/atuadores atribuídos à mesma área aparecem juntos no dashboard e na voz ("tem movimento na lateral leste?").
+- **`entity_map` por área:** `ha_sensor` vira `ha_sensores[]` (lista ordenada por proximidade do ponto de passagem); `actuator.py` escolhe o atuador do mesmo grupo do sensor que confirmou (aspersor leste, não o sul).
+- Sem duplicação: o `slug` continua chave primária (§4.6); o grupo só adiciona `sensores[]`, `vizinhos[]` e `area_id` para localização.
+
 ### 5.8 Switch virtual de modo para voz (HA ↔ Predictor)
 
 Dois MQTT switches com discovery (retain) — espelho do `alarm_control_panel`, sem PIN, expostos para Alexa/Google/Assist:
