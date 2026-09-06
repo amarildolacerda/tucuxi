@@ -1,9 +1,10 @@
 # Integração Tucuxi + Home Assistant + AI Preditiva — Design
 
-> **Status:** RASCUNHO para amadurecimento — contém sugestões, dúvidas e decisões pendentes.
+> **Status:** RASCUNHO — P1 decidida: predictor como **submodule** desacoplado (ver §6-7).
 > **Data:** 2026-09-06
 > **Autor:** brainstorming Tucuxi
 > **Base:** `SPEC.md`, `docs/roadmap.md`, `docs/technical.md`, `src/alerts.py`, `src/events.py`, `src/notifications.py`
+> **Decisão 2026-09-06:** predictor será um **submodule** (pacote Python independente) consumido pelo Tucuxi e/ou como addon HA — contrato MQTT estável.
 
 ---
 
@@ -177,50 +178,82 @@ Usado para aprendizado (ajustar threshold, suprimir sugestão repetida).
 
 ---
 
-## 6. Abordagens possíveis (trade-offs)
+## 6. Abordagens possíveis (trade-offs) — P1 RESOLVIDA: submodule
 
-### Abordagem A — Preditor embarcado no Tucuxi (Recomendada para MVP)
+### Decisão: predictor como **submodule** (pacote Python independente)
 
-- **Como:** novo módulo `src/predictor.py` assina `LocalEventQueue` e lê `storage.py`; modelo EWMA/média móvel + histograma por hora (sem ML pesado); publica via `paho.mqtt.publish.single` no mesmo broker.
-- **Prós:** 100% local/LGPD, sem infra extra, reusa `config.py` e `events.py`, funciona no Pi, deploy único (`docker compose`).
+- **O que é:** repo/pacote `tucuxi-predictor` (Python) com interface estável, consumido como **git submodule** em `src/predictor/` **ou** instalado via `pip` (`requirements.txt`). Mesmo código roda em 3 embalagens sem duplicar lógica:
+  1. **Embarcado no Tucuxi** (MVP) — importado por `src/main.py`, assina `LocalEventQueue` (`src/events.py:11`) e lê `src/storage.py`.
+  2. **Serviço standalone** (`services/predictor/`) — container que consome `tucuxi/camera/+/event` via MQTT.
+  3. **Addon HA** — mesmo container com `config.yaml` HA, publica `sensor.tucuxi_*_prediction` nativo.
+- **Contrato estável (não quebra entre embalagens):** `tucuxi/camera/+/event` → `tucuxi/predictions/+` → `tucuxi/feedback/+` (MQTT, §5 e §8). Validação por `schema_version`.
+- **Por que submodule e não só `src/predictor/` monolito:** desacopla ciclo de release (preditor evolui sem rebuild do Tucuxi), permite versionar modelo (tag `predictor-v0.1.0`), testar isolado, e reaproveitar na central N3/N4 de `docs/architecture-80-cameras.md` para 80 câmeras.
+
+### Abordagem A — Preditor embarcado no Tucuxi (MVP com submodule)
+
+- **Como:** `git submodule add <url> src/predictor` + `from predictor import Predictor, EWMAStore`; modelo EWMA/média móvel + histograma por hora; publica via `paho.mqtt.publish.single` no mesmo broker (`src/config.py`).
+- **Prós:** 100% local/LGPD, sem infra extra, reusa `config.py`/`events.py`, funciona no Pi, deploy único (`docker compose`).
 - **Contras:** limitado a modelos leves; não escala para 80 câmeras (mas MVP é 1-4).
-- **Quando usar:** MVP e instalações residenciais/pequeno condomínio.
+- **Quando usar:** MVP residencial/pequeno condomínio — **é a embalagem inicial do submodule**.
 
-### Abordagem B — Preditor como serviço separado (container/VM)
+### Abordagem B — Preditor como serviço separado (mesma lib, outra embalagem)
 
-- **Como:** serviço Python/Node isolado (`services/predictor/`), consome MQTT `tucuxi/camera/+/event` e SQLite via volume ou HTTP `GET /events`; modelos Prophet/ARIMA leves; publica em `tucuxi/predictions/+`.
-- **Prós:** desacopla CPU do edge; pode rodar em NAS/servidor local; permite trocar modelo sem rebuild do Tucuxi.
-- **Contras:** +1 container para operar; precisa discovery do broker; versionamento de schema entre serviços.
-- **Quando usar:** condomínio com 8+ câmeras ou quando Pi fica no limite.
+- **Como:** `services/predictor/Dockerfile` importa `tucuxi-predictor` via `pip install -e ./src/predictor` ou imagem própria; consome MQTT `tucuxi/camera/+/event` e SQLite via volume ou `GET /events`; publica em `tucuxi/predictions/+`.
+- **Prós:** desacopla CPU do edge; troca modelo sem rebuild do Tucuxi; mesma lib testada.
+- **Contras:** +1 container; discovery do broker; versionar `schema_version`.
+- **Quando usar:** condomínio 8+ câmeras ou Pi no limite — **troca de embalagem, zero código novo**.
 
-### Abordagem C — Preditor em nuvem opcional
+### Abordagem C — Preditor em nuvem opcional (futuro, opt-in)
 
-- **Como:** edge publica eventos anonimizados (sem thumbnail) para endpoint HTTPS; cloud treina modelo e devolve predição via MQTT bridge ou webhook.
-- **Prós:** modelos mais pesados (LSTM, transformers temporais), dashboard analytics.
-- **Contras:** fere "100% local" do README, exige consentimento LGPD, depende de internet, custo.
-- **Quando usar:** só se usuário opt-in explícito; não para MVP.
+- **Como:** edge publica eventos anonimizados (sem thumbnail) para HTTPS; cloud treina e devolve via MQTT bridge.
+- **Prós:** modelos pesados (LSTM), analytics.
+- **Contras:** fere "100% local" (`README.md:18`), LGPD, internet, custo.
+- **Quando usar:** só com consentimento explícito; não no MVP.
 
-**Recomendação:** começar em **A** (módulo interno com interface `Predictor` desacoplada), desenhado para extrair para **B** sem quebrar HA (mesmos tópicos). **C** fica como extensão futura opt-in.
+**Recomendação mantida:** começar em **A com submodule** (interface desacoplada), pronto para **B** sem quebrar HA. **C** opt-in futuro.
 
 ---
 
-## 7. Arquitetura sugerida (isolamento e testabilidade)
+## 7. Arquitetura sugerida — submodule desacoplado
 
 ```
-src/
-  events.py          # CameraEvent (adicionar campos predição opcional)
-  predictor/
-    __init__.py      # interface Predictor: predict(camera, window) -> Prediction
-    ewma.py          # EWMA 7/30 dias por (camera, zona, hora, event_type)
-    store.py         # leitura agregada de storage (contagem por bucket horário)
-    publisher.py     # publica tucuxi/predictions/+ via MQTT
-    suggester.py     # decide se notifica HA (threshold + cooldown + feedback)
+tucuxi/                          # repo principal
+  src/
+    events.py                    # CameraEvent (adicionar campos predição opcional)
+    predictor/                   # ← git submodule → github.com/<org>/tucuxi-predictor
+      pyproject.toml             # pacote `tucuxi-predictor` (pip installable)
+      predictor/
+        __init__.py              # interface Predictor: predict(camera, window) -> Prediction
+        ewma.py                  # EWMA 7/30 dias por (camera, zona, hora, event_type)
+        store.py                 # leitura agregada de storage (contagem por bucket horário)
+        publisher.py             # publica tucuxi/predictions/+ via MQTT
+        suggester.py             # decide se notifica HA (threshold + cooldown + feedback)
+        schemas.py               # dataclasses + validação schema_version
+      tests/
+  services/predictor/            # embalagem B (opcional, reusa submodule)
+    Dockerfile
+    main.py                      # loop MQTT → Predictor → publisher
+  hass-addon/                    # embalagem HA (opcional)
+    config.yaml
+    Dockerfile
+```
+
+Dependência:
+
+```
+# requirements.txt (Tucuxi)
+-e src/predictor        # dev (submodule)
+# ou
+tucuxi-predictor==0.1.0 # prod (pip)
+paho-mqtt
 ```
 
 Princípios (AGENTS.md):
-- Cada unidade com uma responsabilidade, interface bem definida, testável isolada.
+- **Submodule com contrato estável:** Tucuxi e HA dependem de tópicos MQTT (`§5, §8`) e `schemas.py`, não de internals. Trocar embalagem não quebra.
+- Cada unidade com uma responsabilidade, interface bem definida, testável isolada (`pytest` dentro do submodule, CI próprio).
 - Preditor não conhece HA; só publica MQTT. HA decide UI/automação.
 - `AlertRuleEngine` existente continua para eventos reativos; preditor é paralelo, não substitui.
+- Versionamento: `tucuxi` referencia `predictor` por tag (`git submodule update --remote` + `APP_VERSION` em `src/config.py` para log).
 
 Diagrama lógico:
 
@@ -253,14 +286,14 @@ Auto-discovery HA para predição: publicar `homeassistant/sensor/tucuxi_{slug}_
 
 ---
 
-## 9. Roadmap incremental (alinhado ao `docs/roadmap.md`)
+## 9. Roadmap incremental (alinhado ao `docs/roadmap.md`) — com submodule
 
-1. **MVP (2-3 semanas):** Tucuxi publica `tucuxi/camera/+/event` v1 + Preditor EWMA embarcado (A) + `tucuxi/predictions/+` + HA `mqtt.sensor` manual. Sem sugestão automática.
-2. **V2 (predição robusta):** histograma por dia_semana, confiança do modelo, `expira_em`, threshold configurável por câmera/zona (`src/config.py`), extraível para serviço B.
-3. **V3 (sugestão acionável):** `suggester.py` + `persistent_notification` com ações + tópico `tucuxi/feedback`; cooldown por sugestão (reuso `ALERT_COOLDOWN_*`).
-4. **V4 (extensões):** agrícola (pragas, irrigação), energia, 80 câmeras (preditor na central N3/N4 de `architecture-80-cameras.md`), opt-in cloud.
+1. **MVP (2-3 semanas):** criar repo `tucuxi-predictor` + `git submodule add src/predictor` + Tucuxi publica `tucuxi/camera/+/event` v1 + Preditor EWMA (embalagem A) + `tucuxi/predictions/+` + HA `mqtt.sensor` manual. Sem sugestão automática.
+2. **V2 (predição robusta):** histograma dia_semana, `confianca_modelo`, `expira_em`, threshold por câmera/zona (`src/config.py: PREDICTION_THRESHOLD`), `GET /predictions` para debug. Mesma lib, sem nova embalagem.
+3. **V3 (sugestão acionável):** `suggester.py` + `persistent_notification` + `tucuxi/feedback`; cooldown (`ALERT_COOLDOWN_*`); **embalagem B** (`services/predictor/`) e **addon HA** como distribuição alternativa da mesma lib.
+4. **V4 (extensões):** agrícola/energia, 80 câmeras (preditor na central N3/N4 de `architecture-80-cameras.md`), opt-in cloud.
 
-Cada fase com flag `PREDICTOR_ENABLED=false` por padrão.
+Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do submodule com `version` espelhada em tag Git.
 
 ---
 
@@ -311,7 +344,7 @@ Cada fase com flag `PREDICTOR_ENABLED=false` por padrão.
 
 | # | Decisão | Opções | Impacto | Dono | Prazo |
 |---|---|---|---|---|---|
-| P1 | Onde roda o preditor no MVP? | A embarcado / B serviço separado / C cloud opt-in | Infra, LGPD, Pi | Arquitetura | antes do plano |
+| P1 | Onde roda o preditor no MVP? | **DECIDIDO: submodule `tucuxi-predictor` (A no MVP, embalagens B/HA reutilizam mesma lib)** | Infra, LGPD, Pi | Arquitetura | 2026-09-06 |
 | P2 | Tópico canônico de evento | manter `homeassistant/secur/alert` + novo `tucuxi/camera/+/event` vs. migrar tudo para `tucuxi/` | Compatibilidade HA existente | Produto | antes do plano |
 | P3 | Tipo de sensor HA | `sensor` probabilidade 0-1 vs. `binary_sensor` com threshold | UX automação | HA/UX | V1 |
 | P4 | Threshold e cooldown de sugestão | global (`PREDICTION_THRESHOLD=0.75`) vs. por câmera/zona vs. adaptativo por feedback | Falso-positivo | Produto | V3 |
