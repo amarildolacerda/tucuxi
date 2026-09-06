@@ -243,6 +243,27 @@ Notas (internos):
 - Cozinha/serviço acumulam **sensores ambientais** (fumaça/CO/gás, alagamento) — entram direto como "candidato confirmado" no N4 (`docs/roadmap.md:137`), independente de modo.
 - Escritório: cruzar PIR + atividade de rede/PC fora de horário reforça confiança antes de alarmar.
 
+### 4.7 Desejos acadêmicos incorporados (pesquisa 2026-09-07)
+
+Síntese da literatura (survey Lai 2025 N=75; HFES 2024 early adopters; xAI2024; JSS 2026 N=159; CHI 2026 controle; NIST SP 1343; MELISSA RCT USP/UnB; Weimar MuC 2024):
+
+- **Automação antecipatória > comandos manuais:** 77% querem cenários personalizados que antecipem necessidades; voz virou expectativa básica, não diferencial.
+- **Human-in-the-loop:** autonomia graduada por modo (sugerir → agir+notificar → agir total) — já é nosso §4.4.
+- **Explicabilidade centrada no humano:** explicações baseadas no sistema ("porque X") melhoram compreensão sem roubar controle; benefício quantificado aumenta adoção 2,34x (MELISSA).
+- **Espectro de controle + multi-morador:** usuários transitam entre central/físico/voz; secundários sofrem com automações alheias (Weimar 2024) — exige perfis e ponto físico.
+- **Privacidade local-first:** voz é a categoria mais problemática (NIST 2025); linha dura contra expor hábitos/ausência.
+- **Saúde/envelhecimento e energia:** 61%+ demandam monitoramento de saúde; HEMS com LLM reduziu 5,66% do consumo (MELISSA).
+
+**A. Campo `motivo` em toda ação (MVP):** todo comando `tucuxi/automation/actuator` e toda notificação Telegram/HA carrega `motivo` legível ("pessoa na rosa + alarme armado") + base ("base 7 dias, 142 amostras"). Ver §5.5. Fundamento: XAI human-centered + OR 2,34 de adoção com benefício quantificado.
+
+**B. Perfis por morador + modo visita + pets (V2):** `identity_name` vira perfil com regras próprias (ex: criança não dispara L2; caseiro tem acesso liberado em horário); `modo_visita` (switch virtual, mesmo padrão §5.8) suspende sensing interno e dissuasão agressiva mantendo perímetro; pets cadastrados como inibidor total (estende `identidade_conhecida`). Fundamento: primário vs. secundário (Weimar 2024) + linha de privacidade (NIST 2025).
+
+**C. Modo cuidado (V2):** sobre o mesmo pipeline, nova regra para idosos/crianças: caminho noturno (quarto→banheiro) acende luz guia por PIR; `fall_detected` (existente em `behavior.py`) + **inatividade anômala** (sem movimento em janela esperada) → notificação imediata + luzes, independente do modo alarme. Curva de aprendizado mínima: voz para pedir ajuda, nada de app obrigatório. Fundamento: demanda 61%+ saúde + TCCs brasileiros (luz de caminho, voz simples, rejeição a interfaces complexas).
+
+**D. Botão físico arma/desarma (V2):** interruptor/botão Zigbee/MQTT na entrada espelha `switch.tucuxi_alarme` (ON/OFF ↔ armado/desarmado), sincronizado via `tucuxi/mode/alarme/state` como os switches virtuais (§5.8). Cobre o ponto "físico" do espectro de controle (CHI 2026) para quem não usa voz/app — ex: visita, idoso, criança.
+
+**E. P(ocupação) → energia/clima (V4):** o mesmo EWMA por ambiente publica `tucuxi/predictions/{slug}` consumido por automação de **luz/clima por ocupação prevista** (não só segurança/presença simulada); sugestões trazem **economia quantificada** ("desligar ar 14h-16h economizaria ~X kWh/mês") e trade-off conforto×custo configurável. Fundamento: MELISSA −5,66% + Alpha/Beta (Lisboa) + 77% cenários personalizados.
+
 ---
 
 ## 5. Modelo de dados / Formato de mensagens
@@ -347,6 +368,7 @@ Tópico: `tucuxi/automation/actuator` (ou `secur/automation/siren` legado para s
   "target_entity": "switch.aspersor_rosa",
   "duration_sec": 300,
   "condition": {"alarm_mode": "armed"},
+  "motivo": "pessoa na rosa + alarme armado (base 7 dias, 142 amostras)",
   "event_id": "uuid-hex",
   "timestamp": "2026-09-05T19:02:00-03:00"
 }
@@ -605,10 +627,10 @@ Auto-discovery HA para predição: publicar `homeassistant/sensor/tucuxi_{slug}_
 
 ## 9. Roadmap incremental (alinhado ao `docs/roadmap.md`) — com submodule + atuadores HA
 
-1. **MVP (2-3 semanas):** criar repo `tucuxi-predictor` + `git submodule add src/predictor` + Tucuxi publica `tucuxi/camera/+/event` v1 + Preditor EWMA (embalagem A) + `tucuxi/predictions/+` + HA `mqtt.sensor` manual + **modos §4.4** (`tucuxi/ha/alarm_mode` + `entity_map.modos_ativos`) + **dissuasão L1→L2 §4.5** (luz perimetral + aspersor rosa com confirmação câmera+PIR e inibidor chuva). **Sem sugestão automática, mas já com `actuator.py` para "rosa → aspersor 5min" (alarme armado) e simulação de presença básica (viagem) via `tucuxi/automation/actuator`.**
-2. **V2 (predição robusta + modos):** histograma dia_semana, `confianca_modelo`, `expira_em`, threshold por câmera/zona/modo (`src/config.py: PREDICTION_THRESHOLD`), `GET /predictions?modo=` para debug + `ha_client.py` lê `tucuxi/ha/alarm_mode` (ou REST) para P(evento | modo); `entity_map.json` com `acao_viagem` por zona.
+1. **MVP (2-3 semanas):** criar repo `tucuxi-predictor` + `git submodule add src/predictor` + Tucuxi publica `tucuxi/camera/+/event` v1 + Preditor EWMA (embalagem A) + `tucuxi/predictions/+` + HA `mqtt.sensor` manual + **modos §4.4** (`tucuxi/ha/alarm_mode` + `entity_map.modos_ativos`) + **dissuasão L1→L2 §4.5** (luz perimetral + aspersor rosa com confirmação câmera+PIR e inibidor chuva). **Sem sugestão automática, mas já com `actuator.py` para "rosa → aspersor 5min" (alarme armado) e simulação de presença básica (viagem) via `tucuxi/automation/actuator` — todo comando/notificação com campo `motivo` legível + base (§4.7-A).**
+2. **V2 (predição robusta + modos + desejos B/C/D):** histograma dia_semana, `confianca_modelo`, `expira_em`, threshold por câmera/zona/modo (`src/config.py: PREDICTION_THRESHOLD`), `GET /predictions?modo=` para debug + `ha_client.py` lê `tucuxi/ha/alarm_mode` (ou REST) para P(evento | modo); `entity_map.json` com `acao_viagem` por zona; **perfis por morador + `modo_visita` + pets** (B); **modo cuidado** com inatividade anômala (C); **botão físico** espelhado (D).
 3. **V3 (sugestão acionável):** `suggester.py` + `persistent_notification` + `tucuxi/feedback`; cooldown (`ALERT_COOLDOWN_*`); blueprint HA "Tucuxi: sensor → atuador com duração"; **embalagem B** (`services/predictor/`) e **addon HA** como distribuição alternativa da mesma lib.
-4. **V4 (extensões):** agrícola/energia, 80 câmeras (preditor na central N3/N4 de `architecture-80-cameras.md`), opt-in cloud.
+4. **V4 (extensões):** agrícola/**energia — P(ocupação) → luz/clima com economia quantificada e trade-off conforto×custo** (E), 80 câmeras (preditor na central N3/N4 de `architecture-80-cameras.md`), opt-in cloud.
 
 Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do submodule com `version` espelhada em tag Git. Exemplo "rosa" entra no MVP como teste de integração fim-a-fim.
 
