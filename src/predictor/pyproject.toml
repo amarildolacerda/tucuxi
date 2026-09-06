@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tucuxi-predictor"
+version = "0.1.0"
+description = "Preditor EWMA para Tucuxi (submodule futuro)."
+requires-python = ">=3.11"
+dependencies = ["paho-mqtt"]
+
+[tool.setuptools.packages.find]
+include = ["predictor*"]
