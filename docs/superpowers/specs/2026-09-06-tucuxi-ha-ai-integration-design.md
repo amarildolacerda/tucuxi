@@ -178,19 +178,23 @@ Regras:
 
 Orientação do terreno (2026-09-06): **portão no extremo norte, caixa d'água no extremo sul, área social no extremo oeste, garagens a leste.**
 
+Ponto de vista (parado no portão, face norte da casa, olhando para o sul): abre um **triângulo cuja primeira metade é jardim + acesso**; à **esquerda** (leste) ficam as **garagens** com a **rampa de acesso**; à **direita** (oeste) fica a **área social**.
+
 ```
-        N — portão_entrada (L1)
-        |
+        N — portão_entrada (L1) · observador olhando p/ S
+        |\
+        | \  triângulo: 1ª metade = jardim + acesso
+        |  \        (acesso_jardim L2 + aspersor)
 lateral_norte (faixa N, junto ao portão)
         |
-estacionamento — garagem (LESTE) ... casa ... area_social/piscina/firepit (OESTE)
+rampa + garagem (ESQ/L) ... casa ... area_social/piscina/firepit (DIR/O)
         |
 lateral_leste (corredor E)     lateral_oeste (corredor O)
         |
 lateral_sul (faixa S) — caixa_dagua (extremo S)
 ```
 
-Consequências: intrusão típica entra pelo **norte (portão)** e desce para leste (garagens) ou oeste (social); `lateral_norte` é o primeiro corredor após o portão; `lateral_sul` cobre fundos/caixa d'água. Vizinhança (§5.7b) segue essa adjacência real. Mapa visual: `2026-09-06-terreno-mapa.svg` (mesma pasta).
+Consequências: intrusão típica entra pelo **norte (portão)**, atravessa o **triângulo do jardim** e bifurca para leste (rampa/garagens) ou oeste (social); `lateral_norte` é o primeiro corredor após o portão; `acesso_jardim` (rosa) é o ponto de passagem central — dissuasão (aspersor) aqui cobre o funil; `lateral_sul` cobre fundos/caixa d'água. Vizinhança (§5.7b) segue essa adjacência real. Mapa visual: `2026-09-06-terreno-mapa.svg` (mesma pasta).
 
 20 ambientes (13 externos + 7 internos) mapeados para camada + classificação de zona Tucuxi (pública/segurança/privativa — `src/event_rules.py`, CRUD `/zones`):
 
