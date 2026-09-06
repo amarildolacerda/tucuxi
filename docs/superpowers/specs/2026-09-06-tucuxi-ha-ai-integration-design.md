@@ -176,7 +176,9 @@ Regras:
 
 ### 4.6 Inventário de ambientes (requisito 2026-09-06)
 
-13 ambientes mapeados para camada + classificação de zona Tucuxi (pública/segurança/privativa — `src/event_rules.py`, CRUD `/zones`):
+20 ambientes (13 externos + 7 internos) mapeados para camada + classificação de zona Tucuxi (pública/segurança/privativa — `src/event_rules.py`, CRUD `/zones`):
+
+**Externos / perimetrais:**
 
 | # | Ambiente | Slug | Camada | Classificação | Visão | Sensores HA | Dissuasão/atuador |
 |---|---|---|---|---|---|---|---|
@@ -194,11 +196,29 @@ Regras:
 | 12 | Área social | `area_social` | L3 social | pública* | cam pessoa (modo privacidade respeitado) | PIR, (somente presença) | luz social, sem dissuasão agressiva |
 | 13 | Piscina | `piscina` | L3 social | pública* | cam pessoa (máscara + retenção seletiva) | PIR, (futuro: sensor de queda na água) | luz piscina, sem aspersor/sirene direta |
 
-Notas:
+Notas (externos):
 - `* Firepit/área social/piscina`: classificação `pública` dentro do lote (convivência) mas com regras próprias — dissuasão agressiva (aspersor/sirene) **desligada** por padrão para não molhar convidados; em **viagem** viram `segurança` (qualquer presença alerta). Privacidade: `mask_polygons` + `PRIVACY_MODE` (`docs/technical.md:208`) e retenção seletiva por zona valem aqui.
 - Laterais Leste/Norte/Sul/Oeste: mesma receita (PIR + beam + holofote + aspersor setorizado), só muda `slug` e `target_entity` (`switch.aspersor_leste` etc.) — permite confirmar direção do intruso (qual lateral cruzou primeiro).
 - Rosa (exemplo anterior) = instância de `acesso_jardim` ou lateral — manter `rosa` como slug operacional ou renomear para `acesso_jardim`; decidir em P10.
 - Cada ambiente = 1 zona Tucuxi (`/zones`) + 1 entrada no `entity_map` (§5.7) com `layer`, `modos_ativos`, `confirmacao_cruzada`, `inibidores`.
+
+**Internos (L3 interno — privativa, sem câmera por padrão):**
+
+| # | Ambiente | Slug | Camada | Classificação | Visão | Sensores HA | Ação |
+|---|---|---|---|---|---|---|---|
+| 14 | Dorm rosa | `dorm_rosa` | L3 interno | privativa | sem cam (só sensor) | PIR/mmWave, contato janela | alerta silencioso + luz corredor |
+| 15 | Dorm azul | `dorm_azul` | L3 interno | privativa | sem cam | PIR/mmWave, contato janela | alerta silencioso + luz corredor |
+| 16 | Dorm master | `dorm_master` | L3 interno | privativa | sem cam | PIR/mmWave, contato janela | alerta silencioso + luz corredor |
+| 17 | Escritório | `escritorio` | L3 interno | privativa | sem cam (ou cam só em viagem) | PIR, contato janela, sensor PC/rede | alerta + luz |
+| 18 | Sala social | `sala_social` | L3 interno | privativa | sem cam (ou cam só em viagem) | PIR/mmWave, contato porta | luz + sirene se persistir (armado/viagem) |
+| 19 | Cozinha | `cozinha` | L3 interno | privativa | sem cam | PIR, contato porta, fumaça/CO/gás | luz + alerta; fumaça/gás = perigo eminente |
+| 20 | Serviço | `servico` | L3 interno | privativa | sem cam | PIR, contato porta/janela, alagamento | luz + alerta; alagamento = imediato |
+
+Notas (internos):
+- **Sem câmera por padrão** — internos usam sensor físico (PIR/mmWave/contato) como fonte; visão só entra em **viagem** e mesmo assim opt-in por ambiente (P12). Motivo: LGPD/privacidade + `PRIVACY_MODE` + retenção seletiva.
+- Comportamento por modo: **desarmado** = internos silenciosos (morador circula, só fumaça/gás/alagamento alertam); **alarme armado** (ex: noite) = contato/PIR interno alerta + luz, sem sirene total de imediato; **viagem** = qualquer PIR/contato interno = intrusão confirmada (já passou L1-L3) → sirene total + luzes + Telegram crítico.
+- Cozinha/serviço acumulam **sensores ambientais** (fumaça/CO/gás, alagamento) — entram direto como "candidato confirmado" no N4 (`docs/roadmap.md:137`), independente de modo.
+- Escritório: cruzar PIR + atividade de rede/PC fora de horário reforça confiança antes de alarmar.
 
 ---
 
@@ -607,6 +627,7 @@ Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do su
 | P9 | Fail-secure sem HA | assumir último armado vs. desarmado vs. pausar atuação | Segurança em queda de rede | Arquitetura | V1 |
 | P10 | Slug `rosa` vs. inventário §4.6 | manter `rosa` como alias de `acesso_jardim` vs. renomear tudo | Compatibilidade entity_map/automações | Produto | V1 |
 | P11 | Câmeras em área social/piscina | 1 cam por ambiente vs. cam compartilhada vs. sem cam (só PIR) | Privacidade/LGPD, custo | Produto/LGPD | V1 |
+| P12 | Câmeras em internos (dorms/escritório/sala/cozinha/serviço) | sem cam (só sensor) vs. cam só em viagem (opt-in) vs. cam sempre | Privacidade/LGPD | Produto/LGPD | V1 |
 
 **Critério de desempate (AGENTS.md):** priorizar valor perceptível + menor custo + operação 100% local.
 
@@ -614,7 +635,7 @@ Cada fase com flag `PREDICTOR_ENABLED=false` por padrão; `pyproject.toml` do su
 
 ## 15. Próximos passos para aprovar este design
 
-1. Responder D1-D7 e decidir P2-P11 (P1 já decidida: submodule — ver §6) — sem isso o plano ficará com `TBD`.
+1. Responder D1-D7 e decidir P2-P12 (P1 já decidida: submodule — ver §6) — sem isso o plano ficará com `TBD`.
 2. Validar tópicos/payloads com um HA de teste (Mosquitto + `mqtt.sensor` manual + caso "rosa → aspersor 5min" §4.3).
 3. Se aprovado, invocar `superpowers:writing-plans` para gerar plano com tasks 2-5 min (arquivos, testes, env vars).
 
