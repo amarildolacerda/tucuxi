@@ -154,3 +154,11 @@ FALL_ASPECT_RATIO = float(os.getenv("FALL_ASPECT_RATIO", "1.2"))
 SESSION_TTL_HOURS = int(os.getenv("SESSION_TTL_HOURS", "24"))
 MAX_LOGIN_ATTEMPTS = int(os.getenv("MAX_LOGIN_ATTEMPTS", "5"))
 LOCKOUT_MINUTES = int(os.getenv("LOCKOUT_MINUTES", "5"))
+
+# Preditor Tucuxi (MVP embalagem A): desabilitado por padrao; sem dependencia nova.
+PREDICTOR_ENABLED = os.getenv("PREDICTOR_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+PREDICTOR_HISTORY_DAYS = int(os.getenv("PREDICTOR_HISTORY_DAYS", "7"))
+PREDICTOR_INTERVAL_SECONDS = int(os.getenv("PREDICTOR_INTERVAL_SECONDS", "900"))
+PREDICTION_THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.75"))
+PREDICTOR_DETER_COOLDOWN_SEC = int(os.getenv("PREDICTOR_DETER_COOLDOWN_SEC", "900"))
+PREDICTOR_ENTITY_MAP_JSON = os.getenv("PREDICTOR_ENTITY_MAP", "")
