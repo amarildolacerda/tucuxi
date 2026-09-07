@@ -1,16 +1,3 @@
-# ============================================================
-# Tucuxi Monitor — automations.yaml (colar no HA)
-# ============================================================
-# Copie todo este conteúdo para:
-#   Settings → Automations & Scenes → YAML (pegue a lista)
-#
-# OU cole no seu automations.yaml existente (adicione cada
-# bloco como item da lista YAML).
-#
-# IMPORTANTE: O alarm_control_panel.tucuxi deve existir primeiro
-# (criado via configuration.yaml).
-# ============================================================
-
 - alias: "Tucuxi switch alarme -> alarm panel"
   mode: single
   trigger:
@@ -18,13 +5,17 @@
       topic: tucuxi/mode/alarme/set
   action:
     - choose:
-        - conditions: "{{ trigger.payload == 'ON' }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.payload == 'ON' }}"
           sequence:
             - service: alarm_control_panel.alarm_arm_home
-              target: { entity_id: alarm_control_panel.tucuxi }
+              target:
+                entity_id: alarm_control_panel.tucuxi
       default:
         - service: alarm_control_panel.alarm_disarm
-          target: { entity_id: alarm_control_panel.tucuxi }
+          target:
+            entity_id: alarm_control_panel.tucuxi
 
 - alias: "Tucuxi switch viagem -> armed_away"
   mode: single
@@ -33,13 +24,19 @@
       topic: tucuxi/mode/viagem/set
   action:
     - choose:
-        - conditions: "{{ trigger.payload == 'ON' }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.payload == 'ON' }}"
           sequence:
             - service: alarm_control_panel.alarm_arm_away
-              target: { entity_id: alarm_control_panel.tucuxi }
+              target:
+                entity_id: alarm_control_panel.tucuxi
       default:
         - service: mqtt.publish
-          data: { topic: tucuxi/mode/viagem/state, retain: true, payload: "OFF" }
+          data:
+            topic: tucuxi/mode/viagem/state
+            retain: true
+            payload: "OFF"
 
 - alias: "Tucuxi rosa -> aspersor 5min (armado)"
   mode: single
@@ -51,10 +48,13 @@
       value_template: "{{ trigger.payload_json.target_entity == 'switch.aspersor_rosa' }}"
     - condition: state
       entity_id: alarm_control_panel.tucuxi
-      state: ["armed_home", "armed_away"]
+      state:
+        - armed_home
+        - armed_away
   action:
     - service: switch.turn_on
-      target: { entity_id: "{{ trigger.payload_json.target_entity }}" }
+      target:
+        entity_id: "{{ trigger.payload_json.target_entity }}"
     - service: persistent_notification.create
       data:
         title: "Tucuxi dissuasão"
@@ -62,4 +62,5 @@
         notification_id: "tucuxi_rosa_{{ trigger.payload_json.event_id }}"
     - delay: "{{ trigger.payload_json.duration_sec }}"
     - service: switch.turn_off
-      target: { entity_id: "{{ trigger.payload_json.target_entity }}" }
+      target:
+        entity_id: "{{ trigger.payload_json.target_entity }}"
