@@ -1,0 +1,54 @@
+# ============================================================
+# Tucuxi Monitor — configuration.yaml (colar no HA)
+# ============================================================
+# Copie o bloco 'mqtt:' abaixo para o seu configuration.yaml
+# existente, ou substitua inteiramente se estiver vazio.
+#
+# Depois: Settings → YAML → Reload YAML (ou reinicie o HA)
+# ============================================================
+
+mqtt:
+  alarm_control_panel:
+    - name: "Tucuxi"
+      unique_id: "tucuxi_alarm_panel"
+      state_topic: "tucuxi/ha/alarm_mode"
+      command_topic: "tucuxi/ha/alarm_command"
+      code_arm_required: false
+      code_disarm_required: false
+      payload_arm_home: "armed_home"
+      payload_arm_away: "armed_away"
+      payload_disarm: "disarmed"
+
+  sensor:
+    - name: "Tucuxi Rosa Predicao"
+      unique_id: "tucuxi_rosa_prediction"
+      state_topic: "tucuxi/predictions/rosa"
+      value_template: "{{ value_json.probabilidade }}"
+      unit_of_measurement: "%"
+      json_attributes_topic: "tucuxi/predictions/rosa"
+      expire_after: 1800
+
+    - name: "Tucuxi Portao Predicao"
+      unique_id: "tucuxi_portao_entrada_prediction"
+      state_topic: "tucuxi/predictions/portao_entrada"
+      value_template: "{{ value_json.probabilidade }}"
+      unit_of_measurement: "%"
+      json_attributes_topic: "tucuxi/predictions/portao_entrada"
+      expire_after: 1800
+
+  switch:
+    - name: "Tucuxi Alarme"
+      unique_id: "tucuxi_alarme"
+      command_topic: "tucuxi/mode/alarme/set"
+      state_topic: "tucuxi/mode/alarme/state"
+      payload_on: "ON"
+      payload_off: "OFF"
+      icon: "mdi:shield"
+
+    - name: "Tucuxi Viagem"
+      unique_id: "tucuxi_viagem"
+      command_topic: "tucuxi/mode/viagem/set"
+      state_topic: "tucuxi/mode/viagem/state"
+      payload_on: "ON"
+      payload_off: "OFF"
+      icon: "mdi:airplane"
