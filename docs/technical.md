@@ -204,6 +204,59 @@ O projeto captura vídeo de câmeras IP, realiza detecção de movimento e class
 | `LOITERING_MAX_DISTANCE` | `80` | Distância máxima para loitering |
 | `LOITERING_LABELS` | pessoa/veículos | Labels considerados para loitering |
 | `FALL_ASPECT_RATIO` | `1.2` | Razão w/h para heurística de queda |
+| `PREDICTOR_ENABLED` | `false` | Habilita o predictor MVP (embalagem A in-process) |
+| `PREDICTOR_HISTORY_DAYS` | `7` | Dias de histórico para EWMA |
+| `PREDICTOR_INTERVAL_SECONDS` | `900` | Intervalo de publicação de predições (15 min) |
+| `PREDICTION_THRESHOLD` | `0.75` | Limiar de probabilidade para sugestão |
+| `PREDICTOR_DETER_COOLDOWN_SEC` | `900` | Cooldown entre dissuasões (15 min) |
+| `PREDICTOR_ENTITY_MAP` | (vazio) | JSON com mapeamento zona→entidade HA (usa DEFAULT_ENTITY_MAP se vazio) |
+
+## Predictor MVP (Integração HA + AI Preditiva)
+
+O predictor é um módulo in-process (`src/predictor/`) que consome eventos do Tucuxi e publica predições e comandos de atuação via MQTT para o Home Assistant.
+
+### Ativação
+
+1. Adicione `PREDICTOR_ENABLED=true` ao `.env`
+2. Certifique-se de que o Mosquitto está rodando em `MQTT_BROKER_URL:MQTT_BROKER_PORT`
+3. Importe `hass/tucuxi_mvp.yaml` no Home Assistant (Settings → Automations & Scenes → YAML)
+
+### Tópicos MQTT
+
+| Tópico | Direção | Retain | Descrição |
+|---|---|---|---|
+| `tucuxi/camera/{slug}/event` | Tucuxi → HA | false | Evento enriquecido v1 |
+| `tucuxi/predictions/{slug}` | Predictor → HA | true | Predição (probabilidade 0-1) |
+| `tucuxi/automation/actuator` | Predictor → HA | false | Comando de atuação (ex: aspersor 5min) |
+| `tucuxi/ha/alarm_mode` | HA → Predictor | true | Modo do alarme (disarmed/armed_home/armed_away) |
+| `tucuxi/mode/alarme/set` | HA/voz → Predictor | false | Switch virtual alarme (ON/OFF) |
+| `tucuxi/mode/alarme/state` | Predictor → HA | true | Estado do switch alarme |
+| `tucuxi/mode/viagem/set` | HA/voz → Predictor | false | Switch virtual viagem (ON/OFF) |
+| `tucuxi/mode/viagem/state` | Predictor → HA | true | Estado do switch viagem |
+
+### Entity Map (padrão)
+
+O mapeamento zona→entidade HA está em `src/predictor/predictor/entity_map.py`:
+
+| Zona | Câmera | Atuador HA | Modos ativos | Cooldown |
+|---|---|---|---|---|
+| `rosa` | 2 | `switch.aspersor_rosa` | armed_home, armed_away | 15 min |
+| `acesso_jardim` | 2 | `switch.aspersor_rosa` | armed_home, armed_away | 15 min |
+| `portao_entrada` | 1 | `light.perimetral` | armed_home, armed_away | 10 min |
+
+Para sobrescrever, defina `PREDICTOR_ENTITY_MAP` no `.env` com um JSON contendo as chaves desejadas.
+
+### Modos de operação
+
+| Modo | Alarme HA | Switch voz | Comportamento |
+|---|---|---|---|
+| Desarmado | `disarmed` | `switch.tucuxi_alarme` OFF | Monitoramento leve, sem atuação |
+| Armado | `armed_home` | `switch.tucuxi_alarme` ON | Pontos de segurança ativos (ex: rosa → aspersor) |
+| Viagem | `armed_away` | `switch.tucuxi_viagem` ON | Tudo alerta + simulação de presença |
+
+### Falha segura
+
+Se o `alarm_mode` estiver stale (>60s) ou HA offline, o predictor assume **armed_home** (fail-secure) — nunca assume disarmed por ausência de mensagem.
 
 ## Privacidade (detalhes técnicos)
 

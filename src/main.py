@@ -715,6 +715,34 @@ def main():
                                    {"username": MQTT_USERNAME, "password": MQTT_PASSWORD})
         event_bus.subscribe(_predictor.on_event)
 
+        # Subscribe to alarm_mode from HA (alarm_control_panel publishes here)
+        import paho.mqtt.client as _mqtt
+        import json as _json
+        from .predictor.predictor import ha_client as _hc
+        _mqtt_client_sub = _mqtt.Client()
+        if MQTT_USERNAME and MQTT_PASSWORD:
+            _mqtt_client_sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        def _on_alarm_msg(client, userdata, msg):
+            try:
+                raw = msg.payload.decode()
+                try:
+                    payload = _json.loads(raw)
+                    mode = _hc.parse_alarm_mode(payload)
+                    ts = payload.get("timestamp", "")
+                except (_json.JSONDecodeError, ValueError):
+                    # HA alarm panel publishes plain string: "armed_home", "disarmed", etc.
+                    mode = raw if raw in _hc.VALID_MODES else None
+                    ts = ""
+                if mode:
+                    _predictor.set_alarm_mode(mode, ts)
+            except Exception:
+                pass
+        _mqtt_client_sub.on_message = _on_alarm_msg
+        _mqtt_client_sub.connect_async(MQTT_BROKER_URL, MQTT_BROKER_PORT, keepalive=10)
+        _mqtt_client_sub.loop_start()
+        _mqtt_client_sub.subscribe("tucuxi/ha/alarm_mode")
+        logger.info("Predictor subscribed to tucuxi/ha/alarm_mode")
+
         def _predictor_ticker():
             import threading
             from datetime import datetime as _dt

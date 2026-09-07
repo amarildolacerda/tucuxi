@@ -1,4 +1,14 @@
 mqtt:
+  alarm_control_panel:
+    - name: "Tucuxi"
+      unique_id: "tucuxi_alarm_panel"
+      state_topic: "tucuxi/ha/alarm_mode"
+      command_topic: "tucuxi/ha/alarm_command"
+      code_arm_required: false
+      code_disarm_required: false
+      payload_arm_home: "armed_home"
+      payload_arm_away: "armed_away"
+      payload_disarm: "disarmed"
   sensor:
     - name: "Tucuxi Rosa Predicao"
       unique_id: "tucuxi_rosa_prediction"
@@ -42,15 +52,9 @@ automation:
             sequence:
               - service: alarm_control_panel.alarm_arm_home
                 target: { entity_id: alarm_control_panel.tucuxi }
-              - service: mqtt.publish
-                data: { topic: tucuxi/ha/alarm_mode, retain: true,
-                        payload: '{"schema_version": 1, "alarm_mode": "armed_home", "modo_tucuxi": "alarme_armado"}' }
         default:
           - service: alarm_control_panel.alarm_disarm
             target: { entity_id: alarm_control_panel.tucuxi }
-          - service: mqtt.publish
-            data: { topic: tucuxi/ha/alarm_mode, retain: true,
-                    payload: '{"schema_version": 1, "alarm_mode": "disarmed", "modo_tucuxi": "alarme_desarmado"}' }
 
   - alias: "Tucuxi switch viagem -> armed_away"
     mode: single
@@ -63,9 +67,6 @@ automation:
             sequence:
               - service: alarm_control_panel.alarm_arm_away
                 target: { entity_id: alarm_control_panel.tucuxi }
-              - service: mqtt.publish
-                data: { topic: tucuxi/ha/alarm_mode, retain: true,
-                        payload: '{"schema_version": 1, "alarm_mode": "armed_away", "modo_tucuxi": "viagem"}' }
         default:
           - service: mqtt.publish
             data: { topic: tucuxi/mode/viagem/state, retain: true, payload: "OFF" }

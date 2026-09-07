@@ -23,6 +23,7 @@ def test_load_entity_map_overrides_default():
 def test_config_defaults(monkeypatch):
     import importlib, src.config as cfg
     monkeypatch.delenv("PREDICTOR_ENABLED", raising=False)
+    monkeypatch.setenv("PREDICTOR_ENABLED", "false")
     importlib.reload(cfg)
     assert cfg.PREDICTOR_ENABLED is False
     assert cfg.PREDICTOR_HISTORY_DAYS == 7

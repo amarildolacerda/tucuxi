@@ -178,9 +178,9 @@
 - [ ] Evento `visitor_departed` (saída do domínio) + notificação de fechamento
 - [ ] Alerta de desconhecido persistente na portaria (já coberto por intruder/unknown)
 
-## Preditor Tucuxi (MVP, 2026-09-06)
-- Embalagem A in-process (`src/predictor/`, flag `PREDICTOR_ENABLED=false` default).
+## Preditor Tucuxi (MVP, 2026-09-06) ✅ IMPLEMENTADO
+- Embalagem A in-process (`src/predictor/`, flag `PREDICTOR_ENABLED=true` no `.env`).
 - Evento enriquecido `tucuxi/camera/+/event` + predição `tucuxi/predictions/+` + `tucuxi/automation/actuator`.
 - HA pack em `hass/tucuxi_mvp.yaml` (sensores, switches de voz, automação rosa→aspersor 5min).
-- V2+: suggester/feedback, histograma dia_semana, REST `/predictions`, embalagem B/addon (mesma lib).
+- V2: suggester/feedback, histograma dia_semana, REST `/predictions`, embalagem B/addon (mesma lib).
 
