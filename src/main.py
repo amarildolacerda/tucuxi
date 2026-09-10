@@ -637,10 +637,21 @@ class CameraManager:
                 camera_ids = set(camera["id"] for camera in cameras)
 
                 for camera in cameras:
-                    if camera["id"] not in active_ids:
+                    cam_id = camera["id"]
+                    if cam_id not in active_ids:
                         worker = CameraWorker(camera, self.storage, self.alerts, self.object_detector, self.identity_recognizer, self.event_bus)
                         worker.start()
-                        self.workers[camera["id"]] = worker
+                        self.workers[cam_id] = worker
+                    else:
+                        worker = self.workers[cam_id]
+                        old_source = worker.camera.get("source", "")
+                        new_source = camera.get("source", "")
+                        if old_source != new_source:
+                            logger.info("Camera %s source changed: %s -> %s, restarting worker", cam_id, old_source, new_source)
+                            worker.stop()
+                            new_worker = CameraWorker(camera, self.storage, self.alerts, self.object_detector, self.identity_recognizer, self.event_bus)
+                            new_worker.start()
+                            self.workers[cam_id] = new_worker
 
                 for camera_id in list(active_ids - camera_ids):
                     worker = self.workers.pop(camera_id, None)
