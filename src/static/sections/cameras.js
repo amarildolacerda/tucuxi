@@ -334,15 +334,14 @@ function onCanvasMouseMove(e) {
   if (!polyEditor.active) return;
   const { cx, cy, canvas } = canvasMouseCoords(e);
 
-  // Move custom cursor dot to the converted image position
+  // Move custom cursor dot to the canvas display position
   const dot = document.getElementById('poly-cursor-dot');
   if (dot) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = rect.width / canvas.width;
     const scaleY = rect.height / canvas.height;
-    const img = c2img(cx, cy, canvas);
-    dot.style.left = (img.x * scaleX) + 'px';
-    dot.style.top = (img.y * scaleY) + 'px';
+    dot.style.left = (cx * scaleX) + 'px';
+    dot.style.top = (cy * scaleY) + 'px';
   }
 
   if (polyEditor.dragIdx >= 0 && polyEditor.dragPolyIdx >= 0) {
@@ -410,12 +409,7 @@ function onCanvasKeyDown(e) {
 }
 
 function refreshEditorOverlay() {
-  const canvas = document.getElementById('camera-preview-canvas');
-  if (!canvas) return;
   drawCameraPreview();
-  if (polyEditor.active) {
-    drawEditorOverlay(canvas, canvas.getContext('2d'));
-  }
 }
 
 function enterEditorMode(target) {
@@ -577,11 +571,21 @@ function drawCameraPreview() {
   canvas.setAttribute('aria-label',
     `Prévia das zonas de exclusão e máscara de privacidade${previewFrame ? ' sobre o frame da câmera' : ''}.` +
     (counts.length ? ` ${counts.join(', ')}.` : ' Nenhum polígono definido.'));
+
+  if (polyEditor.active) {
+    drawEditorOverlay(canvas, ctx);
+  }
 }
 
 function schedulePreviewRedraw() {
   clearTimeout(previewDebounceTimer);
-  previewDebounceTimer = setTimeout(drawCameraPreview, PREVIEW_DEBOUNCE_MS);
+  previewDebounceTimer = setTimeout(() => {
+    drawCameraPreview();
+    if (polyEditor.active) {
+      const canvas = document.getElementById('camera-preview-canvas');
+      if (canvas) drawEditorOverlay(canvas, canvas.getContext('2d'));
+    }
+  }, PREVIEW_DEBOUNCE_MS);
 }
 
 async function loadPreviewFrame(cameraId) {
