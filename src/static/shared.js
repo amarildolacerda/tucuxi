@@ -1,6 +1,11 @@
 // shared.js — utilidades comuns a todas as seções (fonte única de verdade)
 // CameraFault permanece global (definido em /static/camera_fault.js, script clássico).
 
+export function maskRtspUrl(url) {
+  if (!url) return '';
+  return url.replace(/(:\/\/[^:]+:)([^@]+)(@)/, '$1***$3');
+}
+
 export function formatUptime(ms) {
   const s = Math.floor(ms / 1000);
   const d = Math.floor(s / 86400);

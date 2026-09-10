@@ -1,5 +1,5 @@
 // cameras.js — seção "Câmeras"
-import { fetchData, fetchCached, invalidateCache, escapeHtml, showMenuMessage } from '../shared.js';
+import { fetchData, fetchCached, invalidateCache, escapeHtml, showMenuMessage, maskRtspUrl } from '../shared.js';
 
 const PREVIEW_DEBOUNCE_MS = 350;
 let previewFrame = null;
@@ -22,10 +22,6 @@ let polyEditor = {
   hoverIdx: -1,
 };
 
-function maskRtspUrl(url) {
-  if (!url) return '';
-  return url.replace(/(:\/\/[^:]+:)([^@]+)(@)/, '$1***$3');
-}
 const CLOSE_RADIUS = 12;
 
 function createCameraRow(camera) {

@@ -1,5 +1,5 @@
 // overview.js — seção "Visão geral" (carregada no boot)
-import { fetchData, ageLabelFromMs } from '../shared.js';
+import { fetchData, ageLabelFromMs, maskRtspUrl } from '../shared.js';
 import { loadSection } from '../core.js';
 
 // Estado de módulo
@@ -46,7 +46,7 @@ function createCameraCard(camera, offline = false, lastEventTs = null, n0Count =
         <span class="camera-badge">ID ${camera.id}</span> <span class="n0-badge-slot">${n0Badge}</span>
       </div>
       <p class="camera-zone">Zona: ${zoneLabel} ${offlineBadge}</p>
-      <p class="camera-source">Fonte: ${camera.source}</p>
+      <p class="camera-source">Fonte: ${maskRtspUrl(camera.source)}</p>
       <p class="camera-card-time">Último evento: ${lastEventLabel}</p>
       <div
         class="camera-preview-wrapper"
