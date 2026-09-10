@@ -1019,6 +1019,19 @@ tbody tr:last-child td {
 #camera-preview-canvas {
   cursor: default;
 }
+#poly-cursor-dot {
+  display: none;
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid #fff;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 0 4px rgba(0,0,0,.5);
+}
 
 .form-row .form-label {
   font-size: 0.8rem;

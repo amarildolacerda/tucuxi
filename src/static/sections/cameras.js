@@ -329,6 +329,17 @@ function onCanvasMouseMove(e) {
   if (!polyEditor.active) return;
   const { cx, cy, canvas } = canvasMouseCoords(e);
 
+  // Move custom cursor dot to the converted image position
+  const dot = document.getElementById('poly-cursor-dot');
+  if (dot) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width / canvas.width;
+    const scaleY = rect.height / canvas.height;
+    const img = c2img(cx, cy, canvas);
+    dot.style.left = (img.x * scaleX) + 'px';
+    dot.style.top = (img.y * scaleY) + 'px';
+  }
+
   if (polyEditor.dragIdx >= 0 && polyEditor.dragPolyIdx >= 0) {
     const poly = polyEditor.polygons[polyEditor.dragPolyIdx];
     if (poly) {
@@ -368,6 +379,16 @@ function onCanvasDblClick(e) {
   refreshEditorOverlay();
 }
 
+function onCanvasMouseLeave() {
+  const dot = document.getElementById('poly-cursor-dot');
+  if (dot) dot.style.display = 'none';
+}
+
+function onCanvasMouseEnter() {
+  const dot = document.getElementById('poly-cursor-dot');
+  if (dot) dot.style.display = 'block';
+}
+
 function onCanvasKeyDown(e) {
   if (!polyEditor.active) return;
   if (e.key === 'Escape') {
@@ -400,12 +421,23 @@ function enterEditorMode(target) {
   polyEditor.drawing = false;
   const canvas = document.getElementById('camera-preview-canvas');
   if (canvas) {
-    canvas.style.cursor = 'crosshair';
+    canvas.style.cursor = 'none';
     canvas.addEventListener('mousedown', onCanvasMouseDown);
     canvas.addEventListener('mousemove', onCanvasMouseMove);
     canvas.addEventListener('mouseup', onCanvasMouseUp);
     canvas.addEventListener('dblclick', onCanvasDblClick);
+    canvas.addEventListener('mouseleave', onCanvasMouseLeave);
+    canvas.addEventListener('mouseenter', onCanvasMouseEnter);
     document.addEventListener('keydown', onCanvasKeyDown);
+    // Create custom cursor dot
+    let dot = document.getElementById('poly-cursor-dot');
+    if (!dot) {
+      dot = document.createElement('div');
+      dot.id = 'poly-cursor-dot';
+      canvas.parentElement.style.position = 'relative';
+      canvas.parentElement.appendChild(dot);
+    }
+    dot.style.display = 'block';
   }
   const note = document.getElementById('camera-preview-note');
   if (note) {
@@ -431,8 +463,12 @@ function exitEditorMode() {
     canvas.removeEventListener('mousemove', onCanvasMouseMove);
     canvas.removeEventListener('mouseup', onCanvasMouseUp);
     canvas.removeEventListener('dblclick', onCanvasDblClick);
+    canvas.removeEventListener('mouseleave', onCanvasMouseLeave);
+    canvas.removeEventListener('mouseenter', onCanvasMouseEnter);
     document.removeEventListener('keydown', onCanvasKeyDown);
   }
+  const dot = document.getElementById('poly-cursor-dot');
+  if (dot) dot.style.display = 'none';
   document.querySelectorAll('.poly-editor-btn').forEach(b => b.classList.remove('active'));
   drawCameraPreview();
 }
