@@ -240,7 +240,10 @@ function savePolygonsFromEditor(target) {
   const inputId = target === 'exclusion' ? 'camera-exclusion-zones' : 'camera-mask-polygons';
   const input = document.getElementById(inputId);
   if (!input) return;
-  const polys = polyEditor.polygons.map(poly => poly.map(p => ({ x: p.x, y: p.y })));
+  // Include finished polygons + polygon currently being drawn
+  const all = [...polyEditor.polygons];
+  if (polyEditor.points.length >= 3) all.push([...polyEditor.points]);
+  const polys = all.map(poly => poly.map(p => ({ x: p.x, y: p.y })));
   input.value = polys.length ? JSON.stringify(polys) : '';
   schedulePreviewRedraw();
 }
@@ -317,6 +320,7 @@ function onCanvasMouseDown(e) {
     }
     polyEditor.points.push(imgPt);
   }
+  savePolygonsFromEditor(polyEditor.target);
   refreshEditorOverlay();
   e.preventDefault();
 }
@@ -336,6 +340,7 @@ function onCanvasMouseMove(e) {
   }
   if (polyEditor.dragIdx >= 0 && polyEditor.drawing) {
     polyEditor.points[polyEditor.dragIdx] = c2img(cx, cy, canvas);
+    savePolygonsFromEditor(polyEditor.target);
     refreshEditorOverlay();
     return;
   }
