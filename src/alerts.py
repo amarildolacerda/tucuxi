@@ -118,12 +118,12 @@ def mqtt_handler(payload: Dict):
             # Per-camera state for HA auto-discovery (publish first)
             cam_id = str(payload.get("camera_id", "0"))
             safe_id = f"secur_cam{cam_id}"
-            publish.single(f"secur/{safe_id}/alert_state", payload=json.dumps(payload), hostname=broker, port=port)
-            publish.single(f"secur/{safe_id}/alert", payload=json.dumps(payload), hostname=broker, port=port)
+            publish.single(f"secur/{safe_id}/alert_state", payload=json.dumps(payload), hostname=broker, port=port, retain=True)
+            publish.single(f"secur/{safe_id}/alert", payload=json.dumps(payload), hostname=broker, port=port, retain=True)
             if payload.get("event_type") in ("motion_detected", "object_detected"):
-                publish.single(f"secur/{safe_id}/state", payload="motion", hostname=broker, port=port)
+                publish.single(f"secur/{safe_id}/state", payload="motion", hostname=broker, port=port, retain=True)
             elif payload.get("event_type") == "no_motion":
-                publish.single(f"secur/{safe_id}/state", payload="idle", hostname=broker, port=port)
+                publish.single(f"secur/{safe_id}/state", payload="idle", hostname=broker, port=port, retain=True)
 
             # Main topic publish last so tests capturing the last call see the configured topic
             publish.single(
