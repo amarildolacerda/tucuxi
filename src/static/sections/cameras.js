@@ -428,15 +428,17 @@ function enterEditorMode(target) {
     canvas.addEventListener('mouseleave', onCanvasMouseLeave);
     canvas.addEventListener('mouseenter', onCanvasMouseEnter);
     document.addEventListener('keydown', onCanvasKeyDown);
-    // Create custom cursor dot
-    let dot = document.getElementById('poly-cursor-dot');
-    if (!dot) {
-      dot = document.createElement('div');
-      dot.id = 'poly-cursor-dot';
-      canvas.parentElement.style.position = 'relative';
-      canvas.parentElement.appendChild(dot);
+    // Create custom cursor dot inside wrapper (canvas doesn't render DOM children)
+    const wrap = document.getElementById('camera-preview-canvas-wrap');
+    if (wrap) {
+      let dot = document.getElementById('poly-cursor-dot');
+      if (!dot) {
+        dot = document.createElement('div');
+        dot.id = 'poly-cursor-dot';
+        wrap.appendChild(dot);
+      }
+      dot.style.display = 'block';
     }
-    dot.style.display = 'block';
   }
   const note = document.getElementById('camera-preview-note');
   if (note) {

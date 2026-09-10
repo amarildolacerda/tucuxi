@@ -68,7 +68,9 @@
             <div class="form-row">
                 <span class="form-label" id="camera-preview-label">Preview</span>
                 <div id="camera-preview-box" class="preview-box">
-                    <canvas id="camera-preview-canvas" role="img" aria-label="Prévia das zonas de exclusão e máscara de privacidade sobre o frame da câmera"></canvas>
+                    <div id="camera-preview-canvas-wrap" style="position:relative;line-height:0">
+                        <canvas id="camera-preview-canvas" role="img" aria-label="Prévia das zonas de exclusão e máscara de privacidade sobre o frame da câmera"></canvas>
+                    </div>
                     <div id="camera-preview-loading" class="preview-loading" hidden>
                         <span class="preview-spinner"></span>
                     </div>
