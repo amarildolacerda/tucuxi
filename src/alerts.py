@@ -514,8 +514,6 @@ def mqtt_register_predictor_entities():
             client.publish(f"homeassistant/sensor/tucuxi_{slug}_prediction/config", "", qos=1, retain=True)
             # Publish initial state so HA doesn't show "unknown"
             client.publish(f"tucuxi/predictions/{slug}", json.dumps({"probabilidade": 0}), qos=1, retain=True)
-            # Publish initial state so HA doesn't show "unknown"
-            client.publish(f"tucuxi/predictions/{slug}", json.dumps({"probabilidade": 0}), qos=1, retain=True)
 
         # Alarm mode sensor (shows current mode: disarmed/armed_home/armed_away)
         alarm_config = {
