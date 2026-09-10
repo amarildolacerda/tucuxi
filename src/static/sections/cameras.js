@@ -9,18 +9,19 @@ let previewNote = 'add';
 let cameraEditId = null;
 
 // ── Polygon editor state ─────────────────────────────────────────
+// All coordinates stored in IMAGE space (camera resolution).
+// Converted to canvas coords only when drawing.
 let polyEditor = {
-  active: false,       // editor mode on?
-  target: null,        // 'exclusion' or 'mask'
-  drawing: false,      // currently drawing a new polygon?
-  points: [],          // points of polygon being drawn (canvas coords)
-  polygons: [],        // existing polygons (canvas coords)
-  dragIdx: -1,         // index of point being dragged (-1 = none)
-  dragPolyIdx: -1,     // index of polygon being dragged
-  hoverIdx: -1,        // hover point index
-  closed: false,       // current drawing is closed?
+  active: false,
+  target: null,
+  drawing: false,
+  points: [],        // image coords (polygon being drawn)
+  polygons: [],      // image coords (finished polygons)
+  dragIdx: -1,
+  dragPolyIdx: -1,
+  hoverIdx: -1,
 };
-const CLOSE_RADIUS = 12; // px to close polygon
+const CLOSE_RADIUS = 12;
 
 function createCameraRow(camera) {
   const classesText = camera.alert_classes && camera.alert_classes.length
@@ -150,22 +151,32 @@ function drawMaskPolygon(ctx, pts) {
   strokeWithOutline(ctx, 'rgba(0,0,0,0.7)', 'rgba(255,255,255,0.65)', 3, 1.5);
 }
 
+// ── Coordinate mapping: image <-> canvas ─────────────────────────
+function getScale(canvas) {
+  if (previewFrame) {
+    return { sx: canvas.width / previewFrame.width, sy: canvas.height / previewFrame.height };
+  }
+  return { sx: 1, sy: 1 };
+}
+function img2c(ix, iy, c) { const { sx, sy } = getScale(c); return { x: ix * sx, y: iy * sy }; }
+function c2img(cx, cy, c) { const { sx, sy } = getScale(c); return { x: Math.round(cx / sx), y: Math.round(cy / sy) }; }
+
 // ── Polygon editor drawing helpers ────────────────────────────────
-function drawEditorPolygons(ctx, polygons, color, fillColor) {
+function drawEditorPolygons(ctx, polygons, color, fillColor, canvas) {
   for (const poly of polygons) {
     if (poly.length < 2) continue;
+    const cp = poly.map(p => img2c(p.x, p.y, canvas));
     ctx.beginPath();
-    ctx.moveTo(poly[0].x, poly[0].y);
-    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
-    if (poly.length >= 3) ctx.closePath();
-    if (poly.length >= 3) { ctx.fillStyle = fillColor; ctx.fill(); }
+    ctx.moveTo(cp[0].x, cp[0].y);
+    for (let i = 1; i < cp.length; i++) ctx.lineTo(cp[i].x, cp[i].y);
+    if (cp.length >= 3) ctx.closePath();
+    if (cp.length >= 3) { ctx.fillStyle = fillColor; ctx.fill(); }
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.stroke();
-    // draw vertices
-    for (let i = 0; i < poly.length; i++) {
+    for (let i = 0; i < cp.length; i++) {
       ctx.beginPath();
-      ctx.arc(poly[i].x, poly[i].y, 5, 0, Math.PI * 2);
+      ctx.arc(cp[i].x, cp[i].y, 5, 0, Math.PI * 2);
       ctx.fillStyle = i === 0 ? '#22d3ee' : color;
       ctx.fill();
       ctx.strokeStyle = '#000';
@@ -175,21 +186,21 @@ function drawEditorPolygons(ctx, polygons, color, fillColor) {
   }
 }
 
-function drawEditorDrawing(ctx, points, closed) {
+function drawEditorDrawing(ctx, points, closed, canvas) {
   if (!points.length) return;
+  const cp = points.map(p => img2c(p.x, p.y, canvas));
   ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-  if (closed && points.length >= 3) ctx.closePath();
+  ctx.moveTo(cp[0].x, cp[0].y);
+  for (let i = 1; i < cp.length; i++) ctx.lineTo(cp[i].x, cp[i].y);
+  if (closed && cp.length >= 3) ctx.closePath();
   ctx.strokeStyle = '#22d3ee';
   ctx.lineWidth = 2;
   ctx.setLineDash([6, 4]);
   ctx.stroke();
   ctx.setLineDash([]);
-  // vertices
-  for (let i = 0; i < points.length; i++) {
+  for (let i = 0; i < cp.length; i++) {
     ctx.beginPath();
-    ctx.arc(points[i].x, points[i].y, 5, 0, Math.PI * 2);
+    ctx.arc(cp[i].x, cp[i].y, 5, 0, Math.PI * 2);
     ctx.fillStyle = i === 0 ? '#22d3ee' : '#fff';
     ctx.fill();
     ctx.strokeStyle = '#000';
@@ -198,35 +209,21 @@ function drawEditorDrawing(ctx, points, closed) {
   }
 }
 
-function drawEditorHover(ctx, pt) {
+function drawEditorHover(ctx, pt, canvas) {
   if (!pt) return;
+  const cp = img2c(pt.x, pt.y, canvas);
   ctx.beginPath();
-  ctx.arc(pt.x, pt.y, 8, 0, Math.PI * 2);
+  ctx.arc(cp.x, cp.y, 8, 0, Math.PI * 2);
   ctx.strokeStyle = 'rgba(34,211,238,0.6)';
   ctx.lineWidth = 2;
   ctx.stroke();
 }
 
-function canvasToImage(canvasX, canvasY, canvas) {
-  const W = canvas.width, H = canvas.height;
-  if (previewFrame) {
-    return { x: Math.round(canvasX * previewFrame.width / W), y: Math.round(canvasY * previewFrame.height / H) };
-  }
-  return { x: Math.round(canvasX), y: Math.round(canvasY) };
-}
-
-function imageToCanvas(imgX, imgY, canvas) {
-  const W = canvas.width, H = canvas.height;
-  if (previewFrame) {
-    return { x: imgX * W / previewFrame.width, y: imgY * H / previewFrame.height };
-  }
-  return { x: imgX, y: imgY };
-}
-
-function closestPointIdx(pts, cx, cy, maxDist) {
+function closestPointIdx(pts, cx, cy, canvas, maxDist) {
   let best = -1, bestD = maxDist;
   for (let i = 0; i < pts.length; i++) {
-    const d = Math.hypot(pts[i].x - cx, pts[i].y - cy);
+    const cp = img2c(pts[i].x, pts[i].y, canvas);
+    const d = Math.hypot(cp.x - cx, cp.y - cy);
     if (d < bestD) { bestD = d; best = i; }
   }
   return best;
@@ -236,19 +233,14 @@ function loadPolygonsToEditor(target) {
   const inputId = target === 'exclusion' ? 'camera-exclusion-zones' : 'camera-mask-polygons';
   const raw = document.getElementById(inputId)?.value || '';
   const { polygons } = parsePolygonField(raw);
-  const canvas = document.getElementById('camera-preview-canvas');
-  if (!canvas) return [];
-  return (polygons || []).map(poly => poly.map(p => imageToCanvas(p.x, p.y, canvas)));
+  return polygons || [];
 }
 
 function savePolygonsFromEditor(target) {
-  const canvas = document.getElementById('camera-preview-canvas');
   const inputId = target === 'exclusion' ? 'camera-exclusion-zones' : 'camera-mask-polygons';
   const input = document.getElementById(inputId);
-  if (!canvas || !input) return;
-  const polys = polyEditor.polygons.map(poly =>
-    poly.map(p => canvasToImage(p.x, p.y, canvas))
-  );
+  if (!input) return;
+  const polys = polyEditor.polygons.map(poly => poly.map(p => ({ x: p.x, y: p.y })));
   input.value = polys.length ? JSON.stringify(polys) : '';
   schedulePreviewRedraw();
 }
@@ -256,32 +248,32 @@ function savePolygonsFromEditor(target) {
 function drawEditorOverlay(canvas, ctx) {
   const color = polyEditor.target === 'exclusion' ? '#f59e0b' : 'rgba(255,255,255,0.65)';
   const fill = polyEditor.target === 'exclusion' ? 'rgba(245,158,11,0.22)' : 'rgba(10,12,16,0.55)';
-  drawEditorPolygons(ctx, polyEditor.polygons, color, fill);
-  drawEditorDrawing(ctx, polyEditor.points, polyEditor.closed);
-  if (polyEditor.hoverIdx >= 0) {
-    drawEditorHover(ctx, polyEditor.points[polyEditor.hoverIdx] || null);
+  drawEditorPolygons(ctx, polyEditor.polygons, color, fill, canvas);
+  drawEditorDrawing(ctx, polyEditor.points, false, canvas);
+  if (polyEditor.hoverIdx >= 0 && polyEditor.hoverIdx < polyEditor.points.length) {
+    drawEditorHover(ctx, polyEditor.points[polyEditor.hoverIdx], canvas);
   }
 }
 
-// ── Canvas mouse handlers for polygon editor ──────────────────────
+// ── Canvas mouse handlers ─────────────────────────────────────────
 function onCanvasMouseDown(e) {
   if (!polyEditor.active) return;
-  const rect = e.target.getBoundingClientRect();
+  const canvas = e.target;
+  const rect = canvas.getBoundingClientRect();
   const cx = e.clientX - rect.left;
   const cy = e.clientY - rect.top;
 
-  // Check if clicking on existing point to drag
   const allPts = polyEditor.polygons.flat().concat(polyEditor.points);
-  const idx = closestPointIdx(allPts, cx, cy, CLOSE_RADIUS);
-  if (idx >= 0 && idx >= polyEditor.polygons.flat().length) {
-    // it's in the drawing points
-    polyEditor.dragIdx = idx - polyEditor.polygons.flat().length;
-    polyEditor.drawing = false;
+  const idx = closestPointIdx(allPts, cx, cy, canvas, CLOSE_RADIUS);
+  const flatLen = polyEditor.polygons.flat().length;
+
+  if (idx >= 0 && idx >= flatLen) {
+    polyEditor.dragIdx = idx - flatLen;
+    polyEditor.dragPolyIdx = -1;
     e.preventDefault();
     return;
   }
   if (idx >= 0) {
-    // dragging an existing polygon vertex
     let flatIdx = 0;
     for (let pi = 0; pi < polyEditor.polygons.length; pi++) {
       if (idx < flatIdx + polyEditor.polygons[pi].length) {
@@ -295,28 +287,25 @@ function onCanvasMouseDown(e) {
     return;
   }
 
-  // Add new point
+  const imgPt = c2img(cx, cy, canvas);
   if (!polyEditor.drawing) {
     polyEditor.drawing = true;
-    polyEditor.points = [{ x: cx, y: cy }];
-    polyEditor.closed = false;
+    polyEditor.points = [imgPt];
   } else {
-    // Check if closing polygon
     if (polyEditor.points.length >= 3) {
       const first = polyEditor.points[0];
-      if (Math.hypot(cx - first.x, cy - first.y) < CLOSE_RADIUS) {
-        // Close polygon
+      const cpFirst = img2c(first.x, first.y, canvas);
+      if (Math.hypot(cx - cpFirst.x, cy - cpFirst.y) < CLOSE_RADIUS) {
         polyEditor.polygons.push([...polyEditor.points]);
         polyEditor.points = [];
         polyEditor.drawing = false;
-        polyEditor.closed = false;
         savePolygonsFromEditor(polyEditor.target);
         refreshEditorOverlay();
         e.preventDefault();
         return;
       }
     }
-    polyEditor.points.push({ x: cx, y: cy });
+    polyEditor.points.push(imgPt);
   }
   refreshEditorOverlay();
   e.preventDefault();
@@ -324,51 +313,45 @@ function onCanvasMouseDown(e) {
 
 function onCanvasMouseMove(e) {
   if (!polyEditor.active) return;
-  const rect = e.target.getBoundingClientRect();
+  const canvas = e.target;
+  const rect = canvas.getBoundingClientRect();
   const cx = e.clientX - rect.left;
   const cy = e.clientY - rect.top;
 
   if (polyEditor.dragIdx >= 0 && polyEditor.dragPolyIdx >= 0) {
     const poly = polyEditor.polygons[polyEditor.dragPolyIdx];
-    if (poly && poly[polyEditor.dragIdx]) {
-      poly[polyEditor.dragIdx] = { x: cx, y: cy };
+    if (poly) {
+      poly[polyEditor.dragIdx] = c2img(cx, cy, canvas);
       savePolygonsFromEditor(polyEditor.target);
       refreshEditorOverlay();
     }
     return;
   }
   if (polyEditor.dragIdx >= 0 && polyEditor.drawing) {
-    if (polyEditor.points[polyEditor.dragIdx]) {
-      polyEditor.points[polyEditor.dragIdx] = { x: cx, y: cy };
-      refreshEditorOverlay();
-    }
+    polyEditor.points[polyEditor.dragIdx] = c2img(cx, cy, canvas);
+    refreshEditorOverlay();
     return;
   }
 
-  // Hover highlight
   const allPts = polyEditor.polygons.flat().concat(polyEditor.points);
-  const idx = closestPointIdx(allPts, cx, cy, CLOSE_RADIUS);
+  const idx = closestPointIdx(allPts, cx, cy, canvas, CLOSE_RADIUS);
   const flatLen = polyEditor.polygons.flat().length;
   polyEditor.hoverIdx = idx >= flatLen ? idx - flatLen : -1;
   refreshEditorOverlay();
 }
 
-function onCanvasMouseUp(e) {
-  if (polyEditor.dragIdx >= 0) {
-    polyEditor.dragIdx = -1;
-    polyEditor.dragPolyIdx = -1;
-  }
+function onCanvasMouseUp() {
+  polyEditor.dragIdx = -1;
+  polyEditor.dragPolyIdx = -1;
 }
 
 function onCanvasDblClick(e) {
   if (!polyEditor.active || !polyEditor.drawing) return;
-  // Finish drawing (close polygon if >= 3 points)
   if (polyEditor.points.length >= 3) {
     polyEditor.polygons.push([...polyEditor.points]);
   }
   polyEditor.points = [];
   polyEditor.drawing = false;
-  polyEditor.closed = false;
   savePolygonsFromEditor(polyEditor.target);
   refreshEditorOverlay();
 }
@@ -376,13 +359,10 @@ function onCanvasDblClick(e) {
 function onCanvasKeyDown(e) {
   if (!polyEditor.active) return;
   if (e.key === 'Escape') {
-    // Cancel current drawing
     polyEditor.points = [];
     polyEditor.drawing = false;
-    polyEditor.closed = false;
     refreshEditorOverlay();
   } else if (e.key === 'Delete' || e.key === 'Backspace') {
-    // Delete last polygon
     if (polyEditor.polygons.length > 0) {
       polyEditor.polygons.pop();
       savePolygonsFromEditor(polyEditor.target);
@@ -396,8 +376,7 @@ function refreshEditorOverlay() {
   if (!canvas) return;
   drawCameraPreview();
   if (polyEditor.active) {
-    const ctx = canvas.getContext('2d');
-    drawEditorOverlay(canvas, ctx);
+    drawEditorOverlay(canvas, canvas.getContext('2d'));
   }
 }
 
@@ -407,7 +386,6 @@ function enterEditorMode(target) {
   polyEditor.polygons = loadPolygonsToEditor(target);
   polyEditor.points = [];
   polyEditor.drawing = false;
-  polyEditor.closed = false;
   const canvas = document.getElementById('camera-preview-canvas');
   if (canvas) {
     canvas.style.cursor = 'crosshair';
@@ -417,13 +395,11 @@ function enterEditorMode(target) {
     canvas.addEventListener('dblclick', onCanvasDblClick);
     document.addEventListener('keydown', onCanvasKeyDown);
   }
-  // Update UI hints
   const note = document.getElementById('camera-preview-note');
   if (note) {
-    note.textContent = 'Clique para adicionar pontos. Duplo-clique ou clique no 1o ponto para fechar. Delete remove o ultimo poligono. Esc cancela.';
+    note.textContent = 'Clique para adicionar pontos. Duplo-clique ou clique no 1o ponto para fechar. Delete remove ultimo. Esc cancela.';
     note.classList.remove('error');
   }
-  // Highlight the button
   document.querySelectorAll('.poly-editor-btn').forEach(b => b.classList.remove('active'));
   const btn = document.getElementById(`poly-edit-${target}`);
   if (btn) btn.classList.add('active');
