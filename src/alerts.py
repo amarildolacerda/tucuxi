@@ -434,6 +434,12 @@ def mqtt_register_device(cameras):
                 retain=True,
             )
 
+            # Publish initial states so HA doesn't show "unknown"
+            client.publish(f"secur/{safe_id}/state", "idle", qos=1, retain=True)
+            client.publish(f"secur/{safe_id}/alert_state",
+                           json.dumps({"event_type": "none", "camera_id": cam_id}),
+                           qos=1, retain=True)
+
             logger.info("MQTT auto-discovery registered camera: %s (id=%s)", cam_name, cam_id)
 
     except Exception as e:
