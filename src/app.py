@@ -584,6 +584,7 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
             {"path": "/export", "method": "GET", "description": "Exporta eventos + thumbnails + clipes em ZIP"},
             {"path": "/api/notifications", "method": "GET", "description": "Canais, eventos e routing de notificações"},
             {"path": "/api/notifications/routing", "method": "PUT", "description": "Atualiza routing de um evento em um canal"},
+            {"path": "/api/config", "method": "GET", "description": "Parâmetros de configuração efetivos (motion, alerts, detector, etc.)"},
             {"path": "/api/classes", "method": "GET", "description": "Lista de classes de objetos detectáveis (filtro por câmera)"},
             {"path": "/api/settings", "method": "GET", "description": "Flags globais (modo privacidade)"},
             {"path": "/api/settings", "method": "PUT", "description": "Atualiza flags globais (privacy_mode)"},
