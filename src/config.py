@@ -31,6 +31,8 @@ DEFAULT_CAMERAS = [
 ]
 
 MOTION_MIN_AREA = int(os.getenv("MOTION_MIN_AREA", "5000"))
+MOTION_PERSIST_FRAMES = int(os.getenv("MOTION_PERSIST_FRAMES", "3"))
+RAIN_SPATIAL_RATIO = float(os.getenv("RAIN_SPATIAL_RATIO", "0.35"))
 FRAME_WAIT_SECONDS = float(os.getenv("FRAME_WAIT_SECONDS", "0.1"))
 # Tempo sem frame válido para considerar a câmera não-saudável (FRAME_WAIT_SECONDS=0.1
 # -> 15s = ~150 frames perdidos, generoso para câmeras lentas).
@@ -50,7 +52,7 @@ ALERT_COOLDOWN_BY_EVENT = {
 SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "8000"))
 DETECTOR_MODEL_PATH = os.getenv("DETECTOR_MODEL_PATH", "")
-DETECTOR_CONFIDENCE = float(os.getenv("DETECTOR_CONFIDENCE", "0.25"))
+DETECTOR_CONFIDENCE = float(os.getenv("DETECTOR_CONFIDENCE", "0.40"))
 DETECTOR_IOU = float(os.getenv("DETECTOR_IOU", "0.45"))
 DETECTOR_CLASSES = [
     "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",

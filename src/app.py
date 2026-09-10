@@ -219,6 +219,8 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         return jsonify({
             "motion": {
                 "min_area_px": cfg.MOTION_MIN_AREA,
+                "persist_frames": cfg.MOTION_PERSIST_FRAMES,
+                "rain_spatial_ratio": cfg.RAIN_SPATIAL_RATIO,
                 "frame_wait_seconds": cfg.FRAME_WAIT_SECONDS,
                 "worker_healthy_timeout_seconds": cfg.WORKER_HEALTHY_TIMEOUT_SECONDS,
             },
