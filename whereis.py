@@ -45,6 +45,8 @@ def scan_rtsp_network(base_ip, start, end, port=554, timeout=2):
             if sock.connect_ex((ip, port)) == 0:
                 print(f"    {ip}:{port} -- RTSP detectado")
                 dispositivos.append(ip)
+            else:
+                print(f"    {ip}:{port} -- sem RTSP")    
             sock.close()
         except Exception:
             pass

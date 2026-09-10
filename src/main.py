@@ -42,7 +42,7 @@ from .detector import ObjectDetector
 from .motion import MotionDetector
 from .geometry import bbox_center_in_polygons
 from .masking import frame_for_storage
-from .alerts import AlertService, telegram_handler, mqtt_handler, home_assistant_handler, siren_handler, mqtt_register_device, mqtt_register_predictor_entities
+from .alerts import AlertService, telegram_handler, mqtt_handler, home_assistant_handler, siren_handler, mqtt_register_device, mqtt_register_predictor_entities, alarm_mode_telegram_handler, init_telegram
 from .app import create_app
 from .storage import EventStorage
 from .identity import IdentityRecognizer, RECOGNITION_LABELS, build_recognizer
@@ -58,6 +58,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Initialize Telegram on startup - verify bot is alive
+init_telegram()
 
 
 def _worker_healthy(last_frame_time, now, timeout):
@@ -745,6 +748,7 @@ def main():
         def _on_alarm_msg(client, userdata, msg):
             try:
                 raw = msg.payload.decode()
+                logger.info("Received alarm mode from HA: %s", raw)
                 try:
                     payload = _json.loads(raw)
                     mode = _hc.parse_alarm_mode(payload)
@@ -755,13 +759,69 @@ def main():
                     ts = ""
                 if mode:
                     _predictor.set_alarm_mode(mode, ts)
+                    # Send Telegram notification on mode change
+                    from .alerts import alarm_mode_telegram_handler
+                    alarm_mode_telegram_handler(payload)
+                    # Publish to Alarm Mode sensor topic so HA updates
+                    client.publish("tucuxi/ha/alarm_mode", json.dumps({"alarm_mode": mode}), qos=1, retain=True)
             except Exception:
                 pass
+
+        def _on_alarme_set_msg(client, userdata, msg):
+            """Handle Tucuxi Alarme switch toggle - update Alarm Mode sensor."""
+            try:
+                raw = msg.payload.decode()
+                payload = raw.strip().upper() if raw else None
+                # Map switch payload to alarm mode: ON -> armed_home, OFF -> disarmed
+                if payload == "ON":
+                    mode = "armed_home"
+                elif payload == "OFF":
+                    mode = "disarmed"
+                else:
+                    mode = None
+                if mode and mode in _hc.VALID_MODES:
+                    _predictor.set_alarm_mode(mode, "")
+                    # Publish to Alarm Mode sensor topic so HA updates
+                    client.publish("tucuxi/ha/alarm_mode", json.dumps({"alarm_mode": mode}), qos=1, retain=True)
+            except Exception:
+                pass
+
+        def _on_viagem_set_msg(client, userdata, msg):
+            """Handle Tucuxi Viagem switch toggle - update Viagem sensor."""
+            try:
+                raw = msg.payload.decode()
+                payload = raw.strip().upper() if raw else None
+                # Map switch payload to alarm mode: ON -> armed_away, OFF -> disarmed
+                if payload == "ON":
+                    mode = "armed_away"
+                elif payload == "OFF":
+                    mode = "disarmed"
+                else:
+                    mode = None
+                if mode and mode in _hc.VALID_MODES:
+                    _predictor.set_alarm_mode(mode, "")
+                    # Publish to Viagem state topic so HA updates
+                    client.publish("tucuxi/mode/viagem/state", payload, qos=1, retain=True)
+            except Exception:
+                pass
+
         _mqtt_client_sub.on_message = _on_alarm_msg
+        _mqtt_client_sub.message_callback_add("tucuxi/mode/alarme/set", _on_alarme_set_msg)
+        _mqtt_client_sub.message_callback_add("tucuxi/mode/viagem/set", _on_viagem_set_msg)
         _mqtt_client_sub.connect_async(MQTT_BROKER_URL, MQTT_BROKER_PORT, keepalive=10)
         _mqtt_client_sub.loop_start()
         _mqtt_client_sub.subscribe("tucuxi/ha/alarm_mode")
         logger.info("Predictor subscribed to tucuxi/ha/alarm_mode")
+
+        # Subscribe to switch command topic so Alarm Mode sensor updates when toggle
+        _mqtt_client_sub.subscribe("tucuxi/mode/alarme/set")
+        logger.info("Predictor subscribed to tucuxi/mode/alarme/set (updates Alarm Mode sensor)")
+
+        # Subscribe to viagem switch command topic so Viagem sensor updates when toggle
+        _mqtt_client_sub.subscribe("tucuxi/mode/viagem/set")
+        logger.info("Predictor subscribed to tucuxi/mode/viagem/set (updates Viagem sensor)")
+        _mqtt_client_sub.subscribe("tucuxi/mode/viagem/state")
+        logger.info("Predictor subscribed to tucuxi/mode/viagem/state (updates Viagem sensor state)")
 
         # Auto-discovery: register predictor entities in HA via MQTT
         mqtt_register_predictor_entities()
@@ -792,4 +852,4 @@ def main():
     ])
 
     app = create_app(camera_manager=camera_manager, alerts=alerts, event_bus=event_bus)
-    app.run(host=SERVER_HOST, port=SERVER_PORT)
+    app.run(host=SERVER_HOST, port=SERVER_PORT, debug=True)

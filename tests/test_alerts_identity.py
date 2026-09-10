@@ -53,6 +53,9 @@ def test_mqtt_only_intruder(monkeypatch):
         def loop_start(self): pass
         def loop_stop(self): pass
         def is_connected(self): return True
+        def enable_logger(self, *a, **k): pass
+        def connect(self, *a, **k): pass
+        def loop_forever(self, *a, **k): pass
         def publish(self, topic, payload, *a, **k):
             self.published.append((topic, payload))
             return None
@@ -68,19 +71,19 @@ def test_mqtt_only_intruder(monkeypatch):
 
     instances.clear()
     service.send("1", "Entrada", "intruder_detected", details="x")
-    assert instances and instances[-1].published, "intruder must publish to MQTT"
+    assert instances and instances[0].published, "intruder must publish to MQTT"
 
     instances.clear()
     service.send("1", "Entrada", "identity_recognized", details="x")
-    assert instances and instances[-1].published, "identity must publish to MQTT (automation routing True)"
+    assert instances and instances[0].published, "identity must publish to MQTT (automation routing True)"
 
     instances.clear()
     service.send("1", "Entrada", "unknown_detected", details="x")
-    assert instances and instances[-1].published, "unknown_detected must publish to MQTT (automation routing True)"
+    assert instances and instances[0].published, "unknown_detected must publish to MQTT (automation routing True)"
 
     instances.clear()
     service.send("1", "Entrada", "snapshot_info", details="x")
-    assert not (instances and instances[-1].published), "snapshot_info must NOT publish to MQTT"
+    assert not (instances and instances[0].published), "snapshot_info must NOT publish to MQTT"
 
 
 def test_ha_receives_all_identity_events(monkeypatch):

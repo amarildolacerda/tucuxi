@@ -98,7 +98,73 @@ def telegram_handler(payload: Dict):
         logger.exception("Telegram alert failed for camera_id=%s", payload.get("camera_id"))
 
 
+def init_telegram():
+    """Initialize Telegram on startup - send test message to verify bot is alive."""
+    api_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+
+    if not api_token or not chat_id:
+        logger.debug("Telegram init skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured")
+        return
+
+    # Send startup message to verify bot is alive
+    text = "🤖 **Tucuxi iniciado com sucesso**\n\n" \
+           "Integração Home Assistant carregada.\n" \
+           "Use o painel para configurar câmeras e definir modos de alarme."
+
+    url = f"https://api.telegram.org/bot{api_token}/sendMessage"
+    data = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown",
+    }
+
+    try:
+        response = requests.post(url, data=data, timeout=10)
+        response.raise_for_status()
+        logger.info("Telegram startup notification sent to chat %s", chat_id)
+    except Exception:
+        logger.exception("Falha ao enviar notificação Telegram de inicialização")
+
+
 telegram_handler.channel = "telegram"
+
+
+def alarm_mode_telegram_handler(payload: Dict):
+    """Send Telegram notification when alarm mode changes."""
+    import json as _json
+
+    mode = _json.loads(payload) if isinstance(payload, str) else payload
+    mode_value = mode.get("alarm_mode", "") if isinstance(mode, dict) else ""
+
+    api_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+
+    if not api_token or not chat_id:
+        logger.debug("Telegram handler skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured")
+        return
+
+    mode_map = {
+        "armed_home": "🏠 Modo Arming Home ativado",
+        "armed_away": "🚶 Modo Arming Away ativado",
+        "disarmed": "🔓 Modo Desarmado ativado",
+    }
+
+    text = mode_map.get(mode_value, f"Modo de alarme alterado: {mode_value}")
+
+    url = f"https://api.telegram.org/bot{api_token}/sendMessage"
+    data = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown",
+    }
+
+    try:
+        response = requests.post(url, data=data, timeout=10)
+        response.raise_for_status()
+        logger.info("Telegram alarm mode notification sent: %s", text)
+    except Exception:
+        logger.exception("Falha ao enviar notificação Telegram de modo de alarme")
 
 
 def mqtt_handler(payload: Dict):

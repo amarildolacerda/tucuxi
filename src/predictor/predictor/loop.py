@@ -27,6 +27,8 @@ class PredictorLoop:
         self.publish = publish
         self.alarm_mode = ha_client.FAIL_SECURE_MODE
         self.alarm_ts = ""
+        # Publish initial switch state so HA switch shows correct state on startup
+        self._publish_switch_states(mode=self.alarm_mode)
 
     def set_alarm_mode(self, mode: str, timestamp_iso: str) -> None:
         if mode in ha_client.VALID_MODES:

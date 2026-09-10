@@ -2,7 +2,9 @@ services:
   secur:
     build: .
     container_name: security_app
-    network_mode: host
+    #network_mode: host  # Not effective in Docker Desktop Windows
+    ports:
+      - "0.0.0.0:8000:8000"
     volumes:
       - .:/app
       - ./data:/app/data
