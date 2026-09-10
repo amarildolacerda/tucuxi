@@ -414,7 +414,7 @@ def mqtt_register_device(cameras):
                 "device": device,
             }
             client.publish(
-                f"homeassistant/binary_sensor/{safe_id}_alert/config",
+                f"homeassistant/sensor/{safe_id}_alert/config",
                 json.dumps(alert_config),
                 qos=1,
                 retain=True,
@@ -433,6 +433,9 @@ def mqtt_register_device(cameras):
                 qos=1,
                 retain=True,
             )
+
+            # Remove old binary_sensor alert (replaced by sensor)
+            client.publish(f"homeassistant/binary_sensor/{safe_id}_alert/config", "", qos=1, retain=True)
 
             # Publish initial states so HA doesn't show "unknown"
             client.publish(f"secur/{safe_id}/state", "idle", qos=1, retain=True)
