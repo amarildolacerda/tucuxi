@@ -142,6 +142,8 @@ EVENT_PRUNE_MAX_AGE_DAYS = float(os.getenv("EVENT_PRUNE_MAX_AGE_DAYS", "30"))
 # Intervalo de execução do prune (segundos)
 EVENT_PRUNE_INTERVAL_SECONDS = int(os.getenv("EVENT_PRUNE_INTERVAL_SECONDS", "60"))
 
+EVENT_LIST_LIMIT = int(os.getenv("EVENT_LIST_LIMIT", "100"))
+
 # Fase 3 — comportamento/anomalia (tracking)
 TRACK_IOU_THRESHOLD = float(os.getenv("TRACK_IOU_THRESHOLD", "0.3"))
 TRACK_MAX_AGE_SECONDS = float(os.getenv("TRACK_MAX_AGE_SECONDS", "2.0"))

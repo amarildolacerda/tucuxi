@@ -283,8 +283,11 @@ class EventStorage:
             self.connection.commit()
             return cursor.rowcount > 0
 
-    def list_events(self, limit=100, level=None, camera_id=None, source=None, retained=None,
+    def list_events(self, limit=None, level=None, camera_id=None, source=None, retained=None,
                     start=None, end=None):
+        from .config import EVENT_LIST_LIMIT
+        if limit is None:
+            limit = EVENT_LIST_LIMIT
         with self.lock:
             cursor = self.connection.cursor()
             sql = ("SELECT id, timestamp, camera_id, zone, event_type, details, clip_path, level, dropped, source, retained "

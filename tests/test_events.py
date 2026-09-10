@@ -132,5 +132,6 @@ def test_api_config_endpoint(client):
     assert "behavior" in data
     assert "privacy_mode" in data
     # Verifica alguns valores específicos
-    assert data["motion"]["min_area_px"] == 5000
+    from src.config import MOTION_MIN_AREA
+    assert data["motion"]["min_area_px"] == MOTION_MIN_AREA
     assert data["alerts"]["no_motion_alert_seconds"] == 60
