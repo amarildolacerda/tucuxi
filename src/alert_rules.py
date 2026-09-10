@@ -24,6 +24,7 @@ class AlertRuleEngine:
             event.camera_id, event.zone, stored_type, event.details,
             level=event.level, source=event.source, dropped=event.dropped,
         )
+        event.db_event_id = event_id
         if event.dropped:
             return
 

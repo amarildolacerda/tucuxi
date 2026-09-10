@@ -36,6 +36,7 @@ class CameraEvent:
     camera_name: str = None
     alert_classes: list = None
     event_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    db_event_id: int = None  # ID integer no banco (preenchido pelo AlertRuleEngine)
 
 
 class EventQueue(Protocol):

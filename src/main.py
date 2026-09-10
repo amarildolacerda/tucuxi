@@ -231,7 +231,7 @@ class CameraWorker:
             dropped=not kept,
         )
 
-    def start_clip(self, event_id):
+    def start_clip(self, event):
         """Inicia a gravação de clipe (janela pré-evento + pós-evento).
 
         Extraído do loop de run(): apenas inicializa o writer a partir do
@@ -242,6 +242,8 @@ class CameraWorker:
         if self._clip_writer is not None:
             logger.debug("Clipe já ativo (câmera %s) — pulando", self.camera.get("name"))
             return
+        # Accept event object or integer db_event_id
+        db_event_id = event.db_event_id if hasattr(event, "db_event_id") else event
         try:
             cam_dir = CLIPS_DIR / f"cam{self.camera['id']}"
             cam_dir.mkdir(parents=True, exist_ok=True)
@@ -263,7 +265,7 @@ class CameraWorker:
             self._clip_writer = writer
             self._clip_frames_written = frames_written
             self._clip_end_time = now + CLIP_POST_SECONDS
-            self._clip_event_id = event_id
+            self._clip_event_id = db_event_id
             self._clip_path = clip_path
             self._last_clip_write = now - 1.0 / CLIP_FPS
         except Exception:
@@ -456,7 +458,7 @@ class CameraWorker:
                         self.event_bus.enqueue(event)
                         # Inicia a gravação do clipe (janela pré-evento + pós-evento);
                         # o loop contínuo de escrita permanece em run().
-                        self.start_clip(event.event_id)
+                        self.start_clip(event)
                 except Exception:
                     logger.exception("Erro no processamento do frame (câmera %s)", self.camera.get("name"))
                     time.sleep(1)
