@@ -21,6 +21,11 @@ let polyEditor = {
   dragPolyIdx: -1,
   hoverIdx: -1,
 };
+
+function maskRtspUrl(url) {
+  if (!url) return '';
+  return url.replace(/(:\/\/[^:]+:)([^@]+)(@)/, '$1***$3');
+}
 const CLOSE_RADIUS = 12;
 
 function createCameraRow(camera) {
@@ -37,7 +42,7 @@ function createCameraRow(camera) {
     <tr>
       <td>${camera.id}</td>
       <td>${camera.name}</td>
-      <td>${camera.source}</td>
+      <td>${maskRtspUrl(camera.source)}</td>
       <td>${camera.zone || '-'}</td>
       <td>${classesText}</td>
       <td>${exclusionsText}</td>
