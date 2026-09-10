@@ -40,6 +40,7 @@
 ## Melhorias futuras
 
 - [ ] **Snapshot inteligente** — usar snapshots capturados para identificar pessoas, animais e veículos de forma amigável; notificar informações sem gerar alertas de segurança
+- [ ] **Multi-receptor Telegram** — permitir mais de uma pessoa receber notificações (lista de chat_ids configurável; filtrar por tipo de alerta/zona por destinatário)
 - [ ] Armazenamento em nuvem para backup e análise
 - [ ] Notificações push via e-mail
 - [ ] Detecção de comportamentos e anomalias
