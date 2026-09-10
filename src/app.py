@@ -1264,6 +1264,9 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
                     )
                     if deleted:
                         logger.info("Auto-prune: %d eventos removidos", deleted)
+                    thumbs = storage.prune_orphaned_thumbnails(max_age_days=7)
+                    if thumbs:
+                        logger.info("Auto-prune: %d thumbnails órfãos removidos", thumbs)
                 except Exception:
                     logger.exception("Erro no auto-prune")
 

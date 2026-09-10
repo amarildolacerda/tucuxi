@@ -842,6 +842,45 @@ class EventStorage:
             self.connection.commit()
         return deleted
 
+    def prune_orphaned_thumbnails(self, max_age_days: float = 7):
+        """Remove thumbnails sem evento vinculado (histórico, no-motion) mais
+        antigos que max_age_days. Também remove thumbnails de câmeras que
+        não existem mais."""
+        from .config import THUMBNAIL_HISTORY_SIZE
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+        deleted = 0
+        with self.lock:
+            cursor = self.connection.cursor()
+            # Thumbnails sem event_id e mais antigos que cutoff
+            cursor.execute(
+                "SELECT id, path FROM camera_thumbnails "
+                "WHERE event_id IS NULL AND timestamp < ?",
+                (cutoff,),
+            )
+            orphans = [dict(row) for row in cursor.fetchall()]
+            for item in orphans:
+                try:
+                    Path(item["path"]).unlink(missing_ok=True)
+                except Exception:
+                    pass
+                cursor.execute("DELETE FROM camera_thumbnails WHERE id = ?", (item["id"],))
+                deleted += 1
+            # Thumbnails de câmeras que não existem mais
+            cursor.execute(
+                "SELECT ct.id, ct.path FROM camera_thumbnails ct "
+                "LEFT JOIN cameras c ON ct.camera_id = c.id "
+                "WHERE c.id IS NULL"
+            )
+            for item in [dict(row) for row in cursor.fetchall()]:
+                try:
+                    Path(item["path"]).unlink(missing_ok=True)
+                except Exception:
+                    pass
+                cursor.execute("DELETE FROM camera_thumbnails WHERE id = ?", (item["id"],))
+                deleted += 1
+            self.connection.commit()
+        return deleted
+
     def update_event_clip_path(self, event_id: int, clip_path: str) -> bool:
         with self.lock:
             cursor = self.connection.cursor()
