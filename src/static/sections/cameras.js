@@ -256,12 +256,22 @@ function drawEditorOverlay(canvas, ctx) {
 }
 
 // ── Canvas mouse handlers ─────────────────────────────────────────
-function onCanvasMouseDown(e) {
-  if (!polyEditor.active) return;
+function canvasMouseCoords(e) {
   const canvas = e.target;
   const rect = canvas.getBoundingClientRect();
-  const cx = e.clientX - rect.left;
-  const cy = e.clientY - rect.top;
+  // Map from CSS display size to canvas pixel coordinates
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    cx: (e.clientX - rect.left) * scaleX,
+    cy: (e.clientY - rect.top) * scaleY,
+    canvas,
+  };
+}
+
+function onCanvasMouseDown(e) {
+  if (!polyEditor.active) return;
+  const { cx, cy, canvas } = canvasMouseCoords(e);
 
   const allPts = polyEditor.polygons.flat().concat(polyEditor.points);
   const idx = closestPointIdx(allPts, cx, cy, canvas, CLOSE_RADIUS);
@@ -313,10 +323,7 @@ function onCanvasMouseDown(e) {
 
 function onCanvasMouseMove(e) {
   if (!polyEditor.active) return;
-  const canvas = e.target;
-  const rect = canvas.getBoundingClientRect();
-  const cx = e.clientX - rect.left;
-  const cy = e.clientY - rect.top;
+  const { cx, cy, canvas } = canvasMouseCoords(e);
 
   if (polyEditor.dragIdx >= 0 && polyEditor.dragPolyIdx >= 0) {
     const poly = polyEditor.polygons[polyEditor.dragPolyIdx];
