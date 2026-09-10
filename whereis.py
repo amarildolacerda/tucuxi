@@ -2,57 +2,48 @@
 whereis.py — Scaneia rede RTSP, gera preview e links de acesso.
 
 Uso:
-    python whereis.py                          # scan padrão 192.168.1.100-254
+    python whereis.py                          # scan padrao 192.168.1.100-254
     python whereis.py --base 192.168.0. --start 1 --end 50
-    python whereis.py --timeout 1              # scan mais rápido
+    python whereis.py --user admin --password 123456
+    python whereis.py --timeout 1              # scan mais rapido
 """
 import argparse
+import io
 import os
 import socket
 import sys
 import time
 from pathlib import Path
 
-# ── RTSP URL patterns comuns ──────────────────────────────────────
+# Fix Windows console encoding
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 RTSP_PATHS = [
-    "/",
-    "/stream1",
-    "/stream",
-    "/live",
-    "/1",
-    "/0",
+    "/stream", "/stream1", "/live", "/1", "/0",
     "/cam/realmonitor?channel=1&subtype=0",
     "/Streaming/Channels/101",
     "/h264Preview_01_main",
-    "/VideoConfigure?channel=1",
-    "/media/video1",
 ]
 
-# ── HTTP snapshot paths ───────────────────────────────────────────
 HTTP_SNAPSHOT_PATHS = [
-    "/cgi-bin/snapshot.cgi",
-    "/snapshot.jpg",
+    "/cgi-bin/snapshot.cgi", "/snapshot.jpg",
     "/ISAPI/Streaming/channels/101/picture",
-    "/cgi-bin/currentpic",
-    "/tmp/snap.jpg",
-    "/image.jpg",
-    "/snapshot",
-    "/onvif-http/snapshot",
+    "/cgi-bin/currentpic", "/image.jpg",
 ]
 
 
-def scan_rtsp_network(base_ip="192.168.1.", start=100, end=254, port=554, timeout=2):
-    """Scaneia rede por dispositivos com porta RTSP aberta."""
+def scan_rtsp_network(base_ip, start, end, port=554, timeout=2):
     dispositivos = []
-    print(f"\n🔍 Scaneando {base_ip}{start}-{end}:{port} ...\n")
+    print(f"\n  Scaneando {base_ip}{start}-{end}:{port} ...\n")
     for i in range(start, end + 1):
         ip = f"{base_ip}{i}"
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(timeout)
-            result = sock.connect_ex((ip, port))
-            if result == 0:
-                print(f"  ✅ {ip}:{port} — RTSP detectado")
+            if sock.connect_ex((ip, port)) == 0:
+                print(f"    {ip}:{port} -- RTSP detectado")
                 dispositivos.append(ip)
             sock.close()
         except Exception:
@@ -60,8 +51,26 @@ def scan_rtsp_network(base_ip="192.168.1.", start=100, end=254, port=554, timeou
     return dispositivos
 
 
+def detect_rtsp_server(ip, port=554, timeout=3):
+    """Detecta o servidor RTSP (H264DVR, etc) via OPTIONS."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((ip, port))
+        sock.send(f"OPTIONS rtsp://{ip}:{port}/ RTSP/1.0\r\nCSeq: 1\r\n\r\n".encode())
+        time.sleep(0.3)
+        resp = sock.recv(4096).decode("utf-8", errors="ignore")
+        sock.close()
+        for line in resp.split("\r\n"):
+            if line.lower().startswith("server:"):
+                return line.split(":", 1)[1].strip()
+    except Exception:
+        pass
+    return None
+
+
 def try_rtsp_url(url, timeout=5):
-    """Tenta conectar ao stream RTSP e retorna True se bem-sucedido."""
+    """Tenta RTSP via OpenCV."""
     try:
         import cv2
         cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
@@ -74,7 +83,6 @@ def try_rtsp_url(url, timeout=5):
 
 
 def try_http_snapshot(ip, port=80, timeout=3):
-    """Tenta HTTP snapshot em paths comuns."""
     import urllib.request
     for path in HTTP_SNAPSHOT_PATHS:
         url = f"http://{ip}:{port}{path}"
@@ -82,23 +90,18 @@ def try_http_snapshot(ip, port=80, timeout=3):
             req = urllib.request.Request(url, headers={"User-Agent": "Tucuxi/1.0"})
             resp = urllib.request.urlopen(req, timeout=timeout)
             data = resp.read()
-            if len(data) > 1000:  # imagem válida tem >1KB
+            if len(data) > 1000:
                 return url, data
         except Exception:
             continue
     return None, None
 
 
-def generate_links(ip, port=554):
-    """Gera links de acesso para o dispositivo."""
-    links = {
-        "rtsp": [],
-        "http_snapshot": [],
-        "vlc": [],
-        "ha_camera": [],
-    }
+def generate_links(ip, port=554, user=None, password=None):
+    auth = f"{user}:{password}@" if user and password else ""
+    links = {"rtsp": [], "vlc": [], "ha_camera": []}
     for path in RTSP_PATHS:
-        rtsp_url = f"rtsp://{ip}:{port}{path}"
+        rtsp_url = f"rtsp://{auth}{ip}:{port}{path}"
         links["rtsp"].append(rtsp_url)
         links["vlc"].append(f'vlc "{rtsp_url}"')
         links["ha_camera"].append(
@@ -111,7 +114,6 @@ def generate_links(ip, port=554):
 
 
 def save_preview(ip, frame, output_dir="previews"):
-    """Salva snapshot como PNG."""
     if frame is None:
         return None
     try:
@@ -126,85 +128,128 @@ def save_preview(ip, frame, output_dir="previews"):
 
 def main():
     parser = argparse.ArgumentParser(description="Scan RTSP + preview + links")
-    parser.add_argument("--base", default="192.168.1.", help="Base IP (default: 192.168.1.)")
-    parser.add_argument("--start", type=int, default=100, help="Start IP (default: 100)")
-    parser.add_argument("--end", type=int, default=254, help="End IP (default: 254)")
-    parser.add_argument("--port", type=int, default=554, help="RTSP port (default: 554)")
-    parser.add_argument("--timeout", type=float, default=2, help="Scan timeout (default: 2s)")
-    parser.add_argument("--preview", action="store_true", default=True, help="Gerar preview PNG")
+    parser.add_argument("--base", default="192.168.1.")
+    parser.add_argument("--start", type=int, default=100)
+    parser.add_argument("--end", type=int, default=254)
+    parser.add_argument("--port", type=int, default=554)
+    parser.add_argument("--timeout", type=float, default=2)
+    parser.add_argument("--user", default=None)
+    parser.add_argument("--password", default=None)
+    parser.add_argument("--preview", action="store_true", default=True)
     parser.add_argument("--no-preview", dest="preview", action="store_false")
     args = parser.parse_args()
 
-    # 1. Scan
     dispositivos = scan_rtsp_network(args.base, args.start, args.end, args.port, args.timeout)
-
     if not dispositivos:
-        print("\n❌ Nenhum dispositivo RTSP encontrado.")
+        print("\n  Nenhum dispositivo RTSP encontrado.")
         return
 
-    print(f"\n📋 {len(dispositivos)} dispositivo(s) encontrado(s)\n")
-
-    # 2. Para cada dispositivo, tentar preview e gerar links
+    print(f"\n  {len(dispositivos)} dispositivo(s) encontrado(s)\n")
     report = []
+
     for ip in dispositivos:
-        print(f"━━━ {ip} ━━━")
+        print(f"--- {ip} ---")
         device_info = {"ip": ip, "rtsp_ok": False, "snapshot": None, "links": None}
 
-        # Tentar RTSP stream
-        print(f"  📡 Testando RTSP stream...")
-        for path in RTSP_PATHS:
-            url = f"rtsp://{ip}:{args.port}{path}"
-            ok, frame = try_rtsp_url(url, timeout=3)
-            if ok:
-                print(f"  ✅ Stream OK: {url}")
-                device_info["rtsp_ok"] = True
-                device_info["stream_url"] = url
+        # Detect server type
+        server = detect_rtsp_server(ip, args.port)
+        if server:
+            print(f"  Server: {server}")
+            device_info["server"] = server
 
-                if args.preview and frame is not None:
-                    saved = save_preview(ip, frame)
-                    if saved:
-                        print(f"  🖼️  Preview salvo: {saved}")
-                        device_info["snapshot"] = saved
-                break
+        is_h264dvr = server and "H264DVR" in server
 
-        # Tentar HTTP snapshot
+        # Try RTSP
+        print(f"  Testando RTSP stream...")
+        auth = f"{args.user}:{args.password}@" if args.user and args.password else ""
+
+        if is_h264dvr:
+            print(f"  [H264DVR detectado] Digest auth nao suportado via Python/OpenCV.")
+            print(f"  Use VLC ou instale ffmpeg para preview.")
+            # Generate the correct URL for user to test in VLC
+            if args.user and args.password:
+                vlc_url = f"rtsp://{auth}{ip}:{args.port}/stream"
+                print(f"  Teste no VLC: {vlc_url}")
+                device_info["stream_url"] = vlc_url
+                device_info["rtsp_ok"] = "vlc_required"
+        else:
+            # Try exact URL first
+            if args.user and args.password:
+                for path in ["/stream", "/stream1", "/live"]:
+                    url = f"rtsp://{auth}{ip}:{args.port}{path}"
+                    ok, frame = try_rtsp_url(url, timeout=5)
+                    if ok:
+                        print(f"  Stream OK: {url}")
+                        device_info["rtsp_ok"] = True
+                        device_info["stream_url"] = url
+                        if args.preview and frame is not None:
+                            saved = save_preview(ip, frame)
+                            if saved:
+                                print(f"  Preview: {saved}")
+                                device_info["snapshot"] = saved
+                        break
+
+            # Try other paths
+            if not device_info["rtsp_ok"]:
+                for path in RTSP_PATHS:
+                    url = f"rtsp://{auth}{ip}:{args.port}{path}"
+                    ok, frame = try_rtsp_url(url, timeout=3)
+                    if ok:
+                        print(f"  Stream OK: {url}")
+                        device_info["rtsp_ok"] = True
+                        device_info["stream_url"] = url
+                        if args.preview and frame is not None:
+                            saved = save_preview(ip, frame)
+                            if saved:
+                                print(f"  Preview: {saved}")
+                                device_info["snapshot"] = saved
+                        break
+
+        # HTTP snapshot
         if not device_info["snapshot"]:
-            print(f"  🌐 Tentando HTTP snapshot...")
+            print(f"  Tentando HTTP snapshot...")
             snap_url, snap_data = try_http_snapshot(ip)
             if snap_url:
                 Path("previews").mkdir(exist_ok=True)
                 snap_file = f"previews/{ip.replace('.', '_')}_http.jpg"
                 with open(snap_file, "wb") as f:
                     f.write(snap_data)
-                print(f"  🖼️  HTTP snapshot: {snap_url} → {snap_file}")
+                print(f"  HTTP snapshot: {snap_url}")
                 device_info["snapshot"] = snap_file
 
-        # Gerar links
-        links = generate_links(ip, args.port)
+        # Links
+        links = generate_links(ip, args.port, args.user, args.password)
         device_info["links"] = links
 
-        print(f"  🔗 Links RTSP:")
-        for i, url in enumerate(links["rtsp"][:3]):  # mostrar só os 3 principais
-            print(f"     {url}")
-        if len(links["rtsp"]) > 3:
-            print(f"     ... +{len(links['rtsp'])-3} outras URLs")
+        print(f"  Links RTSP:")
+        for url in links["rtsp"][:3]:
+            print(f"    {url}")
+
+        # H264DVR special instructions
+        if is_h264dvr:
+            print()
+            print(f"  === H264DVR INSTRUCOES ===")
+            print(f"  1. Abra VLC Media Player")
+            print(f"  2. Media -> Open Network Stream")
+            print(f"  3. Cole: rtsp://{auth}{ip}:{args.port}/stream")
+            print(f"  4. Se funcionar, use o mesmo link no HA")
+            print(f"  5. Para snapshot, use: http://{ip}/cgi-bin/snapshot.cgi")
+            print(f"     (pode precisar de auth HTTP)")
 
         print()
         report.append(device_info)
 
-    # 3. Gerar relatório
-    print("━━━ RELATÓRIO ━━━\n")
-
+    # Report
     report_file = f"previews/scan_{args.base.replace('.', '_')}.txt"
     Path("previews").mkdir(exist_ok=True)
     with open(report_file, "w", encoding="utf-8") as f:
-        f.write(f"Tucuxi Camera Scan — {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Tucuxi Camera Scan -- {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Rede: {args.base}{args.start}-{args.end}:{args.port}\n\n")
-
         for dev in report:
             f.write(f"{'='*50}\n")
             f.write(f"IP: {dev['ip']}\n")
-            f.write(f"RTSP: {'✅ OK' if dev['rtsp_ok'] else '❌ Falhou'}\n")
+            f.write(f"Server: {dev.get('server', 'unknown')}\n")
+            f.write(f"RTSP: {dev['rtsp_ok']}\n")
             if dev.get("stream_url"):
                 f.write(f"Stream URL: {dev['stream_url']}\n")
             if dev.get("snapshot"):
@@ -212,21 +257,17 @@ def main():
             f.write(f"\nRTSP URLs:\n")
             for url in dev["links"]["rtsp"]:
                 f.write(f"  {url}\n")
-            f.write(f"\nVLC:\n")
-            f.write(f"  {dev['links']['vlc'][0]}\n")
-            f.write(f"\nHA Camera config:\n")
-            f.write(dev["links"]["ha_camera"][0])
-            f.write("\n")
+            f.write(f"\nVLC:\n  {dev['links']['vlc'][0]}\n")
+            f.write(f"\nHA Camera config:\n{dev['links']['ha_camera'][0]}\n")
 
-    print(f"📄 Relatório salvo em: {report_file}")
-    print(f"📁 Previews em: previews/\n")
+    print(f"Relatorio: {report_file}\n")
 
-    # Resumo
-    print("━━━ RESUMO ━━━")
+    # Summary
+    print("=== RESUMO ===")
     for dev in report:
-        status = "✅" if dev["rtsp_ok"] else "⚠️"
-        snap = "📸" if dev.get("snapshot") else ""
-        print(f"  {status} {dev['ip']} {snap}")
+        status = "OK" if dev["rtsp_ok"] is True else "VLC" if dev["rtsp_ok"] == "vlc_required" else "FAIL"
+        snap = " [preview]" if dev.get("snapshot") else ""
+        print(f"  [{status}] {dev['ip']}{snap}")
 
 
 if __name__ == "__main__":
