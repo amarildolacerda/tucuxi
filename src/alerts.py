@@ -533,6 +533,8 @@ def mqtt_register_predictor_entities():
             qos=1,
             retain=True,
         )
+        # Publish initial state so HA doesn't show "unknown"
+        client.publish("tucuxi/ha/alarm_mode", json.dumps({"alarm_mode": "disarmed"}), qos=1, retain=True)
 
         # Switches
         switches = [
