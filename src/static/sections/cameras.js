@@ -8,6 +8,20 @@ let previewDebounceTimer = null;
 let previewNote = 'add';
 let cameraEditId = null;
 
+// ── Polygon editor state ─────────────────────────────────────────
+let polyEditor = {
+  active: false,       // editor mode on?
+  target: null,        // 'exclusion' or 'mask'
+  drawing: false,      // currently drawing a new polygon?
+  points: [],          // points of polygon being drawn (canvas coords)
+  polygons: [],        // existing polygons (canvas coords)
+  dragIdx: -1,         // index of point being dragged (-1 = none)
+  dragPolyIdx: -1,     // index of polygon being dragged
+  hoverIdx: -1,        // hover point index
+  closed: false,       // current drawing is closed?
+};
+const CLOSE_RADIUS = 12; // px to close polygon
+
 function createCameraRow(camera) {
   const classesText = camera.alert_classes && camera.alert_classes.length
     ? camera.alert_classes.join(', ')
@@ -134,6 +148,329 @@ function drawMaskPolygon(ctx, pts) {
     ctx.fill();
   }
   strokeWithOutline(ctx, 'rgba(0,0,0,0.7)', 'rgba(255,255,255,0.65)', 3, 1.5);
+}
+
+// ── Polygon editor drawing helpers ────────────────────────────────
+function drawEditorPolygons(ctx, polygons, color, fillColor) {
+  for (const poly of polygons) {
+    if (poly.length < 2) continue;
+    ctx.beginPath();
+    ctx.moveTo(poly[0].x, poly[0].y);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+    if (poly.length >= 3) ctx.closePath();
+    if (poly.length >= 3) { ctx.fillStyle = fillColor; ctx.fill(); }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // draw vertices
+    for (let i = 0; i < poly.length; i++) {
+      ctx.beginPath();
+      ctx.arc(poly[i].x, poly[i].y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = i === 0 ? '#22d3ee' : color;
+      ctx.fill();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+}
+
+function drawEditorDrawing(ctx, points, closed) {
+  if (!points.length) return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  if (closed && points.length >= 3) ctx.closePath();
+  ctx.strokeStyle = '#22d3ee';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // vertices
+  for (let i = 0; i < points.length; i++) {
+    ctx.beginPath();
+    ctx.arc(points[i].x, points[i].y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = i === 0 ? '#22d3ee' : '#fff';
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+}
+
+function drawEditorHover(ctx, pt) {
+  if (!pt) return;
+  ctx.beginPath();
+  ctx.arc(pt.x, pt.y, 8, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(34,211,238,0.6)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function canvasToImage(canvasX, canvasY, canvas) {
+  const W = canvas.width, H = canvas.height;
+  if (previewFrame) {
+    return { x: Math.round(canvasX * previewFrame.width / W), y: Math.round(canvasY * previewFrame.height / H) };
+  }
+  return { x: Math.round(canvasX), y: Math.round(canvasY) };
+}
+
+function imageToCanvas(imgX, imgY, canvas) {
+  const W = canvas.width, H = canvas.height;
+  if (previewFrame) {
+    return { x: imgX * W / previewFrame.width, y: imgY * H / previewFrame.height };
+  }
+  return { x: imgX, y: imgY };
+}
+
+function closestPointIdx(pts, cx, cy, maxDist) {
+  let best = -1, bestD = maxDist;
+  for (let i = 0; i < pts.length; i++) {
+    const d = Math.hypot(pts[i].x - cx, pts[i].y - cy);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+function loadPolygonsToEditor(target) {
+  const inputId = target === 'exclusion' ? 'camera-exclusion-zones' : 'camera-mask-polygons';
+  const raw = document.getElementById(inputId)?.value || '';
+  const { polygons } = parsePolygonField(raw);
+  const canvas = document.getElementById('camera-preview-canvas');
+  if (!canvas) return [];
+  return (polygons || []).map(poly => poly.map(p => imageToCanvas(p.x, p.y, canvas)));
+}
+
+function savePolygonsFromEditor(target) {
+  const canvas = document.getElementById('camera-preview-canvas');
+  const inputId = target === 'exclusion' ? 'camera-exclusion-zones' : 'camera-mask-polygons';
+  const input = document.getElementById(inputId);
+  if (!canvas || !input) return;
+  const polys = polyEditor.polygons.map(poly =>
+    poly.map(p => canvasToImage(p.x, p.y, canvas))
+  );
+  input.value = polys.length ? JSON.stringify(polys) : '';
+  schedulePreviewRedraw();
+}
+
+function drawEditorOverlay(canvas, ctx) {
+  const color = polyEditor.target === 'exclusion' ? '#f59e0b' : 'rgba(255,255,255,0.65)';
+  const fill = polyEditor.target === 'exclusion' ? 'rgba(245,158,11,0.22)' : 'rgba(10,12,16,0.55)';
+  drawEditorPolygons(ctx, polyEditor.polygons, color, fill);
+  drawEditorDrawing(ctx, polyEditor.points, polyEditor.closed);
+  if (polyEditor.hoverIdx >= 0) {
+    drawEditorHover(ctx, polyEditor.points[polyEditor.hoverIdx] || null);
+  }
+}
+
+// ── Canvas mouse handlers for polygon editor ──────────────────────
+function onCanvasMouseDown(e) {
+  if (!polyEditor.active) return;
+  const rect = e.target.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+
+  // Check if clicking on existing point to drag
+  const allPts = polyEditor.polygons.flat().concat(polyEditor.points);
+  const idx = closestPointIdx(allPts, cx, cy, CLOSE_RADIUS);
+  if (idx >= 0 && idx >= polyEditor.polygons.flat().length) {
+    // it's in the drawing points
+    polyEditor.dragIdx = idx - polyEditor.polygons.flat().length;
+    polyEditor.drawing = false;
+    e.preventDefault();
+    return;
+  }
+  if (idx >= 0) {
+    // dragging an existing polygon vertex
+    let flatIdx = 0;
+    for (let pi = 0; pi < polyEditor.polygons.length; pi++) {
+      if (idx < flatIdx + polyEditor.polygons[pi].length) {
+        polyEditor.dragPolyIdx = pi;
+        polyEditor.dragIdx = idx - flatIdx;
+        break;
+      }
+      flatIdx += polyEditor.polygons[pi].length;
+    }
+    e.preventDefault();
+    return;
+  }
+
+  // Add new point
+  if (!polyEditor.drawing) {
+    polyEditor.drawing = true;
+    polyEditor.points = [{ x: cx, y: cy }];
+    polyEditor.closed = false;
+  } else {
+    // Check if closing polygon
+    if (polyEditor.points.length >= 3) {
+      const first = polyEditor.points[0];
+      if (Math.hypot(cx - first.x, cy - first.y) < CLOSE_RADIUS) {
+        // Close polygon
+        polyEditor.polygons.push([...polyEditor.points]);
+        polyEditor.points = [];
+        polyEditor.drawing = false;
+        polyEditor.closed = false;
+        savePolygonsFromEditor(polyEditor.target);
+        refreshEditorOverlay();
+        e.preventDefault();
+        return;
+      }
+    }
+    polyEditor.points.push({ x: cx, y: cy });
+  }
+  refreshEditorOverlay();
+  e.preventDefault();
+}
+
+function onCanvasMouseMove(e) {
+  if (!polyEditor.active) return;
+  const rect = e.target.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+
+  if (polyEditor.dragIdx >= 0 && polyEditor.dragPolyIdx >= 0) {
+    const poly = polyEditor.polygons[polyEditor.dragPolyIdx];
+    if (poly && poly[polyEditor.dragIdx]) {
+      poly[polyEditor.dragIdx] = { x: cx, y: cy };
+      savePolygonsFromEditor(polyEditor.target);
+      refreshEditorOverlay();
+    }
+    return;
+  }
+  if (polyEditor.dragIdx >= 0 && polyEditor.drawing) {
+    if (polyEditor.points[polyEditor.dragIdx]) {
+      polyEditor.points[polyEditor.dragIdx] = { x: cx, y: cy };
+      refreshEditorOverlay();
+    }
+    return;
+  }
+
+  // Hover highlight
+  const allPts = polyEditor.polygons.flat().concat(polyEditor.points);
+  const idx = closestPointIdx(allPts, cx, cy, CLOSE_RADIUS);
+  const flatLen = polyEditor.polygons.flat().length;
+  polyEditor.hoverIdx = idx >= flatLen ? idx - flatLen : -1;
+  refreshEditorOverlay();
+}
+
+function onCanvasMouseUp(e) {
+  if (polyEditor.dragIdx >= 0) {
+    polyEditor.dragIdx = -1;
+    polyEditor.dragPolyIdx = -1;
+  }
+}
+
+function onCanvasDblClick(e) {
+  if (!polyEditor.active || !polyEditor.drawing) return;
+  // Finish drawing (close polygon if >= 3 points)
+  if (polyEditor.points.length >= 3) {
+    polyEditor.polygons.push([...polyEditor.points]);
+  }
+  polyEditor.points = [];
+  polyEditor.drawing = false;
+  polyEditor.closed = false;
+  savePolygonsFromEditor(polyEditor.target);
+  refreshEditorOverlay();
+}
+
+function onCanvasKeyDown(e) {
+  if (!polyEditor.active) return;
+  if (e.key === 'Escape') {
+    // Cancel current drawing
+    polyEditor.points = [];
+    polyEditor.drawing = false;
+    polyEditor.closed = false;
+    refreshEditorOverlay();
+  } else if (e.key === 'Delete' || e.key === 'Backspace') {
+    // Delete last polygon
+    if (polyEditor.polygons.length > 0) {
+      polyEditor.polygons.pop();
+      savePolygonsFromEditor(polyEditor.target);
+      refreshEditorOverlay();
+    }
+  }
+}
+
+function refreshEditorOverlay() {
+  const canvas = document.getElementById('camera-preview-canvas');
+  if (!canvas) return;
+  drawCameraPreview();
+  if (polyEditor.active) {
+    const ctx = canvas.getContext('2d');
+    drawEditorOverlay(canvas, ctx);
+  }
+}
+
+function enterEditorMode(target) {
+  polyEditor.active = true;
+  polyEditor.target = target;
+  polyEditor.polygons = loadPolygonsToEditor(target);
+  polyEditor.points = [];
+  polyEditor.drawing = false;
+  polyEditor.closed = false;
+  const canvas = document.getElementById('camera-preview-canvas');
+  if (canvas) {
+    canvas.style.cursor = 'crosshair';
+    canvas.addEventListener('mousedown', onCanvasMouseDown);
+    canvas.addEventListener('mousemove', onCanvasMouseMove);
+    canvas.addEventListener('mouseup', onCanvasMouseUp);
+    canvas.addEventListener('dblclick', onCanvasDblClick);
+    document.addEventListener('keydown', onCanvasKeyDown);
+  }
+  // Update UI hints
+  const note = document.getElementById('camera-preview-note');
+  if (note) {
+    note.textContent = 'Clique para adicionar pontos. Duplo-clique ou clique no 1o ponto para fechar. Delete remove o ultimo poligono. Esc cancela.';
+    note.classList.remove('error');
+  }
+  // Highlight the button
+  document.querySelectorAll('.poly-editor-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(`poly-edit-${target}`);
+  if (btn) btn.classList.add('active');
+  refreshEditorOverlay();
+}
+
+function exitEditorMode() {
+  polyEditor.active = false;
+  polyEditor.target = null;
+  polyEditor.points = [];
+  polyEditor.polygons = [];
+  polyEditor.drawing = false;
+  const canvas = document.getElementById('camera-preview-canvas');
+  if (canvas) {
+    canvas.style.cursor = '';
+    canvas.removeEventListener('mousedown', onCanvasMouseDown);
+    canvas.removeEventListener('mousemove', onCanvasMouseMove);
+    canvas.removeEventListener('mouseup', onCanvasMouseUp);
+    canvas.removeEventListener('dblclick', onCanvasDblClick);
+    document.removeEventListener('keydown', onCanvasKeyDown);
+  }
+  document.querySelectorAll('.poly-editor-btn').forEach(b => b.classList.remove('active'));
+  drawCameraPreview();
+}
+
+function setupPolyEditorButtons() {
+  const exclBtn = document.getElementById('poly-edit-exclusion');
+  const maskBtn = document.getElementById('poly-edit-mask');
+  const clearBtn = document.getElementById('poly-editor-clear');
+
+  if (exclBtn) exclBtn.addEventListener('click', () => {
+    if (polyEditor.active && polyEditor.target === 'exclusion') { exitEditorMode(); }
+    else { exitEditorMode(); enterEditorMode('exclusion'); }
+  });
+  if (maskBtn) maskBtn.addEventListener('click', () => {
+    if (polyEditor.active && polyEditor.target === 'mask') { exitEditorMode(); }
+    else { exitEditorMode(); enterEditorMode('mask'); }
+  });
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    if (polyEditor.active) {
+      polyEditor.polygons = [];
+      polyEditor.points = [];
+      polyEditor.drawing = false;
+      savePolygonsFromEditor(polyEditor.target);
+      refreshEditorOverlay();
+    }
+  });
 }
 
 function drawCameraPreview() {
@@ -602,6 +939,8 @@ function setupCameraForm() {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', schedulePreviewRedraw);
   });
+
+  setupPolyEditorButtons();
 }
 
 async function refreshCameras() {

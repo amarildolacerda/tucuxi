@@ -990,6 +990,36 @@ tbody tr:last-child td {
   color: var(--danger);
 }
 
+/* ---------- Polygon Editor ---------- */
+.poly-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.poly-editor-btn {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s;
+}
+.poly-editor-btn:hover {
+  background: var(--surface-2);
+  border-color: var(--primary);
+}
+.poly-editor-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+#camera-preview-canvas {
+  cursor: default;
+}
+
 .form-row .form-label {
   font-size: 0.8rem;
   font-weight: 500;

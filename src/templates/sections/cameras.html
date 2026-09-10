@@ -53,11 +53,17 @@
             <div class="form-row">
                 <label for="camera-exclusion-zones">Zonas de exclusão (JSON)</label>
                 <textarea id="camera-exclusion-zones" rows="3" placeholder='[{"x":0,"y":0},{"x":100,"y":0},{"x":100,"y":100}]'></textarea>
+                <div class="poly-editor-row">
+                    <button type="button" class="button-mini poly-editor-btn" id="poly-edit-exclusion">Desenhar no preview</button>
+                </div>
             </div>
             <div class="form-row">
                 <label for="camera-mask-polygons">Máscara de privacidade (JSON)</label>
                 <textarea id="camera-mask-polygons" rows="3" placeholder='[{"x":0,"y":0},{"x":100,"y":0},{"x":100,"y":100}]'></textarea>
-                <small style="color:var(--muted-subtle);">Regiões com blur nos thumbnails, clipes e snapshot. Mesmo formato das zonas de exclusão.</small>
+                <div class="poly-editor-row">
+                    <button type="button" class="button-mini poly-editor-btn" id="poly-edit-mask">Desenhar no preview</button>
+                    <small style="color:var(--muted-subtle);">Regiões com blur nos thumbnails, clipes e snapshot.</small>
+                </div>
             </div>
             <div class="form-row">
                 <span class="form-label" id="camera-preview-label">Preview</span>
@@ -70,6 +76,7 @@
                 <div class="preview-legend">
                     <span class="preview-legend-item"><span class="preview-legend-swatch exclusion"></span>Zona de exclusão — movimento ignorado</span>
                     <span class="preview-legend-item"><span class="preview-legend-swatch mask"></span>Máscara de privacidade — borrado</span>
+                    <button type="button" class="button-mini" id="poly-editor-clear" style="margin-left:auto;">Limpar poligono</button>
                 </div>
                 <small id="camera-preview-note" class="preview-note" aria-live="polite"></small>
             </div>
