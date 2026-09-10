@@ -644,10 +644,16 @@ class CameraManager:
                         self.workers[cam_id] = worker
                     else:
                         worker = self.workers[cam_id]
-                        old_source = worker.camera.get("source", "")
-                        new_source = camera.get("source", "")
-                        if old_source != new_source:
-                            logger.info("Camera %s source changed: %s -> %s, restarting worker", cam_id, old_source, new_source)
+                        old = worker.camera
+                        new = camera
+                        needs_restart = (
+                            old.get("source", "") != new.get("source", "")
+                            or old.get("exclusion_zones") != new.get("exclusion_zones")
+                            or old.get("alert_classes") != new.get("alert_classes")
+                            or old.get("mask_polygons") != new.get("mask_polygons")
+                        )
+                        if needs_restart:
+                            logger.info("Camera %s config changed, restarting worker", cam_id)
                             worker.stop()
                             new_worker = CameraWorker(camera, self.storage, self.alerts, self.object_detector, self.identity_recognizer, self.event_bus)
                             new_worker.start()
