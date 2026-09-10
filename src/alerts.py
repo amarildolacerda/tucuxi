@@ -444,3 +444,123 @@ def mqtt_register_device(cameras):
             client.disconnect()
         except Exception:
             pass
+
+
+def mqtt_register_predictor_entities():
+    """Publish MQTT auto-discovery for predictor entities (sensors, switches, alarm mode)."""
+    broker = os.getenv("MQTT_BROKER_URL", "192.168.1.12")
+    port = int(os.getenv("MQTT_BROKER_PORT", "1883"))
+    username = os.getenv("MQTT_USERNAME", "kzuca")
+    password = os.getenv("MQTT_PASSWORD", "123")
+
+    if not broker:
+        return
+
+    import paho.mqtt.client as mqtt
+
+    client = mqtt.Client()
+    if username and password:
+        client.username_pw_set(username, password)
+
+    try:
+        client.connect_async(broker, port, keepalive=10)
+        client.loop_start()
+        import time
+        deadline = time.time() + 3
+        while time.time() < deadline and not client.is_connected():
+            time.sleep(0.1)
+
+        if not client.is_connected():
+            logger.warning("MQTT predictor register: connection timeout")
+            return
+
+        device = {
+            "identifiers": ["tucuxi_predictor"],
+            "name": "Tucuxi Predictor",
+            "model": "Tucuxi AI",
+            "manufacturer": "Tucuxi",
+            "sw_version": APP_VERSION,
+        }
+
+        # Prediction sensors
+        for slug in ("rosa", "portao_entrada"):
+            name = slug.replace("_", " ").title()
+            config = {
+                "name": f"Tucuxi {name} Predição",
+                "state_topic": f"tucuxi/predictions/{slug}",
+                "value_template": "{{ value_json.probabilidade }}",
+                "unit_of_measurement": "%",
+                "json_attributes_topic": f"tucuxi/predictions/{slug}",
+                "unique_id": f"tucuxi_{slug}_prediction",
+                "expire_after": 1800,
+                "device": device,
+            }
+            client.publish(
+                f"homeassistant/sensor/tucuxi_{slug}_prediction/config",
+                json.dumps(config),
+                qos=1,
+                retain=True,
+            )
+
+        # Alarm mode sensor (shows current mode: disarmed/armed_home/armed_away)
+        alarm_config = {
+            "name": "Tucuxi Alarme Mode",
+            "state_topic": "tucuxi/ha/alarm_mode",
+            "value_template": "{{ value_json.alarm_mode }}",
+            "json_attributes_topic": "tucuxi/ha/alarm_mode",
+            "unique_id": "tucuxi_alarm_mode",
+            "icon": "mdi:shield-home",
+            "device": device,
+        }
+        client.publish(
+            "homeassistant/sensor/tucuxi_alarm_mode/config",
+            json.dumps(alarm_config),
+            qos=1,
+            retain=True,
+        )
+
+        # Switches
+        switches = [
+            {
+                "name": "Tucuxi Alarme",
+                "unique_id": "tucuxi_alarme",
+                "command_topic": "tucuxi/mode/alarme/set",
+                "state_topic": "tucuxi/mode/alarme/state",
+                "icon": "mdi:shield",
+            },
+            {
+                "name": "Tucuxi Viagem",
+                "unique_id": "tucuxi_viagem",
+                "command_topic": "tucuxi/mode/viagem/set",
+                "state_topic": "tucuxi/mode/viagem/state",
+                "icon": "mdi:airplane",
+            },
+        ]
+        for sw in switches:
+            config = {
+                "name": sw["name"],
+                "unique_id": sw["unique_id"],
+                "command_topic": sw["command_topic"],
+                "state_topic": sw["state_topic"],
+                "payload_on": "ON",
+                "payload_off": "OFF",
+                "icon": sw["icon"],
+                "device": device,
+            }
+            client.publish(
+                f"homeassistant/switch/{sw['unique_id']}/config",
+                json.dumps(config),
+                qos=1,
+                retain=True,
+            )
+
+        logger.info("MQTT predictor auto-discovery registered")
+
+    except Exception as e:
+        logger.warning("MQTT predictor register failed: %s", e)
+    finally:
+        try:
+            client.loop_stop()
+            client.disconnect()
+        except Exception:
+            pass

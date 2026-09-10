@@ -32,6 +32,38 @@ class PredictorLoop:
         if mode in ha_client.VALID_MODES:
             self.alarm_mode = mode
             self.alarm_ts = timestamp_iso
+            if self.publish:
+                self._publish_switch_states(mode)
+
+    def _publish_switch_states(self, mode: str) -> None:
+        """Publish switch states so HA reflects the current alarm mode."""
+        import paho.mqtt.client as mqtt
+        client = mqtt.Client()
+        if self.auth and self.auth.get("username"):
+            client.username_pw_set(self.auth["username"], self.auth.get("password", ""))
+        try:
+            client.connect_async(self.broker, self.port, keepalive=10)
+            client.loop_start()
+            import time
+            deadline = time.time() + 3
+            while time.time() < deadline and not client.is_connected():
+                time.sleep(0.1)
+            if not client.is_connected():
+                return
+            # Alarme switch: ON if armed_home, OFF if disarmed
+            alarme_state = "ON" if mode == "armed_home" else "OFF"
+            client.publish("tucuxi/mode/alarme/state", alarme_state, retain=True)
+            # Viagem switch: ON if armed_away, OFF otherwise
+            viagem_state = "ON" if mode == "armed_away" else "OFF"
+            client.publish("tucuxi/mode/viagem/state", viagem_state, retain=True)
+        except Exception:
+            pass
+        finally:
+            try:
+                client.loop_stop()
+                client.disconnect()
+            except Exception:
+                pass
 
     def effective_mode(self, now_ts: float | None = None) -> str:
         now = time.time() if now_ts is None else now_ts

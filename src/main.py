@@ -42,7 +42,7 @@ from .detector import ObjectDetector
 from .motion import MotionDetector
 from .geometry import bbox_center_in_polygons
 from .masking import frame_for_storage
-from .alerts import AlertService, telegram_handler, mqtt_handler, home_assistant_handler, siren_handler, mqtt_register_device
+from .alerts import AlertService, telegram_handler, mqtt_handler, home_assistant_handler, siren_handler, mqtt_register_device, mqtt_register_predictor_entities
 from .app import create_app
 from .storage import EventStorage
 from .identity import IdentityRecognizer, RECOGNITION_LABELS, build_recognizer
@@ -742,6 +742,9 @@ def main():
         _mqtt_client_sub.loop_start()
         _mqtt_client_sub.subscribe("tucuxi/ha/alarm_mode")
         logger.info("Predictor subscribed to tucuxi/ha/alarm_mode")
+
+        # Auto-discovery: register predictor entities in HA via MQTT
+        mqtt_register_predictor_entities()
 
         def _predictor_ticker():
             import threading
