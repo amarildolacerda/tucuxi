@@ -8,22 +8,5 @@ services:
     volumes:
       - .:/app
       - ./data:/app/data
-    environment:
-      - SERVER_HOST=0.0.0.0
-      - SERVER_PORT=8000
-      - DETECTOR_MODEL_PATH=/app/data/models/detector.onnx
-      - MOTION_MIN_AREA=5000
-      - FRAME_WAIT_SECONDS=0.1
-      # TELEGRAM_BOT_TOKEN/CHAT_ID vem do .env montado em /app/.env
-      # (via volume .:/app). Não definir aqui como string vazia, senão
-      # load_dotenv() nao sobrescreve (python-dotenv tem override=False
-      # por padrao) e o status do sistema mostra 'token nao configurado'
-      # mesmo com o .env correto.
-      - MQTT_BROKER_URL=192.168.1.12
-      - MQTT_BROKER_PORT=1883
-      - MQTT_USERNAME=kzuca
-      - MQTT_PASSWORD=123
-      - MQTT_TOPIC=homeassistant/security/alert
-      - HOME_ASSISTANT_URL=http://192.168.1.12:8123
-      - HOME_ASSISTANT_TOKEN=${HOME_ASSISTANT_TOKEN}
-      - HOME_ASSISTANT_EVENT_TYPE=security_alert
+    env_file:
+      - .env
