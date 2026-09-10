@@ -345,8 +345,10 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         user = getattr(g, "current_user", None)
         cameras = _filter_cameras(storage.list_cameras(), user)
         events = _filter_events_by_cameras(storage.list_events(limit=100), user)
+        events = storage.enrich_events_with_thumbnails(events)
         zones = storage.list_zones()
         n0_events = storage.list_events(level=0, limit=100)
+        n0_events = storage.enrich_events_with_thumbnails(n0_events)
         worker_status = camera_manager.get_status() if camera_manager is not None else []
         return jsonify({
             "cameras": cameras,
@@ -694,6 +696,7 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         limit = 1000 if retained == 1 else 100
         items = storage.list_events(limit=limit, level=level, camera_id=camera_id, retained=retained)
         items = _filter_events_by_cameras(items, user)
+        items = storage.enrich_events_with_thumbnails(items)
         return jsonify(items)
 
     @app.route("/api/ingest", methods=["POST"])

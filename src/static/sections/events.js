@@ -208,17 +208,28 @@ function renderEventCards(events, alertTypes) {
     `;
     card.appendChild(body);
     grid.appendChild(card);
-    getCameraThumb(event.camera_id, event.timestamp).then(url => {
-      if (url) {
-        const img = document.createElement('img');
-        img.className = 'event-thumb';
-        img.src = url;
-        img.alt = 'thumbnail';
-        img.loading = 'lazy';
-        img.style.cursor = 'zoom-in';
-        thumb.replaceWith(img);
-      }
-    });
+    const thumbUrl = event.thumbnail_url || null;
+    if (thumbUrl) {
+      const img = document.createElement('img');
+      img.className = 'event-thumb';
+      img.src = thumbUrl;
+      img.alt = 'thumbnail';
+      img.loading = 'lazy';
+      img.style.cursor = 'zoom-in';
+      thumb.replaceWith(img);
+    } else {
+      getCameraThumb(event.camera_id, event.timestamp).then(url => {
+        if (url) {
+          const img = document.createElement('img');
+          img.className = 'event-thumb';
+          img.src = url;
+          img.alt = 'thumbnail';
+          img.loading = 'lazy';
+          img.style.cursor = 'zoom-in';
+          thumb.replaceWith(img);
+        }
+      });
+    }
   });
 
   if (!window._eventTimeTimer) {

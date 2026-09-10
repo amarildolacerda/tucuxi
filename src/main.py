@@ -450,6 +450,7 @@ class CameraWorker:
                         thumb_path = self._capture_thumbnail(
                             storage_frame, None, time.time(), thumb_keep, thumb_days,
                             event_id=event.event_id,
+                            force=bool(detections),
                         )
                         event.thumbnail_path = thumb_path or self._latest_thumbnail_path()
                         self.event_bus.enqueue(event)

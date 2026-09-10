@@ -317,6 +317,31 @@ class EventStorage:
             rows = filtered
         return rows
 
+    def enrich_events_with_thumbnails(self, events):
+        """Adiciona thumbnail_url a cada evento usando camera_thumbnails.event_id."""
+        if not events:
+            return events
+        event_ids = [str(e["id"]) for e in events if e.get("id")]
+        if not event_ids:
+            return events
+        with self.lock:
+            cursor = self.connection.cursor()
+            placeholders = ",".join("?" * len(event_ids))
+            cursor.execute(
+                f"SELECT event_id, id AS thumb_id FROM camera_thumbnails "
+                f"WHERE event_id IN ({placeholders}) ORDER BY id",
+                event_ids,
+            )
+            thumb_map = {}
+            for row in cursor.fetchall():
+                eid = row["event_id"]
+                if eid not in thumb_map:
+                    thumb_map[eid] = row["thumb_id"]
+        for event in events:
+            tid = thumb_map.get(str(event["id"]))
+            event["thumbnail_url"] = f"/thumbnails/{tid}/image" if tid else None
+        return events
+
     def add_camera(self, name: str, source: str, zone: str = None, alert_classes=None, exclusion_zones=None, mask_polygons=None):
         with self.lock:
             cursor = self.connection.cursor()
