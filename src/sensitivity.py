@@ -4,7 +4,25 @@ import logging
 from enum import Enum
 from typing import Optional
 
+from .config import (
+    DETECTOR_CONFIDENCE,
+    DETECTOR_IOU,
+    MOTION_MIN_AREA,
+    MOTION_PERSIST_FRAMES,
+    TRACK_IOU_THRESHOLD,
+)
+
 logger = logging.getLogger(__name__)
+
+# Parâmetros efetivos de câmera sem registro em camera_sensitivity.
+# Seguem a prioridade do SPEC §8.1/§8.2: DB > env vars (config) > defaults.
+CONFIG_DEFAULT_PARAMS = {
+    "motion_min_area": MOTION_MIN_AREA,
+    "motion_persist_frames": MOTION_PERSIST_FRAMES,
+    "detector_confidence": DETECTOR_CONFIDENCE,
+    "detector_iou": DETECTOR_IOU,
+    "track_iou_threshold": TRACK_IOU_THRESHOLD,
+}
 
 
 class SensitivityLevel(str, Enum):
@@ -81,8 +99,14 @@ class SensitivityManager:
         self._workers.pop(camera_id, None)
 
     def get_effective_params(self, camera_id: int) -> dict:
-        """Return effective parameters (preset or custom) for a camera."""
+        """Return effective parameters (env fallback, preset or custom) for a camera.
+
+        Sem registro em ``camera_sensitivity`` a câmera usa os valores do
+        ambiente (config.py), preservando o comportamento atual (SPEC §8.2).
+        """
         config = self.storage.get_camera_sensitivity(camera_id)
+        if not config.get("configured", True):
+            return dict(CONFIG_DEFAULT_PARAMS)
         level = config["level"]
         if level == SensitivityLevel.CUSTOM and config["custom_params"]:
             return config["custom_params"]

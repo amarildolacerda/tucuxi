@@ -2,13 +2,17 @@
 import json
 import pytest
 from unittest.mock import MagicMock
-from src.sensitivity import SensitivityManager, SensitivityLevel, SENSITIVITY_PRESETS
+from src.sensitivity import SensitivityManager, SensitivityLevel, SENSITIVITY_PRESETS, CONFIG_DEFAULT_PARAMS
 from src.storage import EventStorage
 
 
-def test_worker_receives_sensitivity_on_init():
+def _storage(tmp_path):
+    return EventStorage(tmp_path / "events.db")
+
+
+def test_worker_receives_sensitivity_on_init(tmp_path):
     """When a worker starts, it should apply sensitivity from DB."""
-    storage = EventStorage()
+    storage = _storage(tmp_path)
     storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
     camera = storage.list_cameras()[0]
     storage.set_camera_sensitivity(camera["id"], "high")
@@ -25,9 +29,26 @@ def test_worker_receives_sensitivity_on_init():
     assert mock_worker.object_detector.confidence_threshold == SENSITIVITY_PRESETS[SensitivityLevel.HIGH]["detector_confidence"]
 
 
-def test_set_level_updates_worker_in_realtime():
+def test_unconfigured_worker_keeps_env_params(tmp_path):
+    """Sem registro no DB, o worker mantém os parâmetros do ambiente (não o preset)."""
+    storage = _storage(tmp_path)
+    storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
+    camera = storage.list_cameras()[0]
+    mgr = SensitivityManager(storage)
+    mock_worker = MagicMock()
+    mock_worker._motion_detector_ref = MagicMock()
+    mock_worker.object_detector = MagicMock()
+    mock_worker._tracker_ref = MagicMock()
+    mgr.register_worker(camera["id"], mock_worker)
+    params = mgr.get_effective_params(camera["id"])
+    mgr.apply_to_workers(camera["id"], params)
+    assert mock_worker._motion_detector_ref.min_area == CONFIG_DEFAULT_PARAMS["motion_min_area"]
+    assert mock_worker.object_detector.confidence_threshold == CONFIG_DEFAULT_PARAMS["detector_confidence"]
+
+
+def test_set_level_updates_worker_in_realtime(tmp_path):
     """Changing level should immediately update worker params."""
-    storage = EventStorage()
+    storage = _storage(tmp_path)
     storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
     camera = storage.list_cameras()[0]
     mgr = SensitivityManager(storage)
@@ -44,17 +65,17 @@ def test_set_level_updates_worker_in_realtime():
     assert mock_worker._motion_detector_ref.min_area == 8000
 
 
-def test_apply_to_workers_no_worker():
+def test_apply_to_workers_no_worker(tmp_path):
     """apply_to_workers should not crash if no worker registered."""
-    storage = EventStorage()
+    storage = _storage(tmp_path)
     mgr = SensitivityManager(storage)
     params = mgr.get_effective_params(999)
     mgr.apply_to_workers(999, params)  # Should not raise
 
 
-def test_unregister_worker():
+def test_unregister_worker(tmp_path):
     """Unregistering a worker should remove it from the manager."""
-    storage = EventStorage()
+    storage = _storage(tmp_path)
     storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
     camera = storage.list_cameras()[0]
     mgr = SensitivityManager(storage)
@@ -65,9 +86,9 @@ def test_unregister_worker():
     assert camera["id"] not in mgr._workers
 
 
-def test_custom_params_applied_to_worker():
+def test_custom_params_applied_to_worker(tmp_path):
     """Custom params should be applied to the worker correctly."""
-    storage = EventStorage()
+    storage = _storage(tmp_path)
     storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
     camera = storage.list_cameras()[0]
     custom = {"motion_min_area": 4000, "motion_persist_frames": 3, "detector_confidence": 0.35, "detector_iou": 0.42, "track_iou_threshold": 0.28}
@@ -90,9 +111,9 @@ def test_custom_params_applied_to_worker():
 # ── API tests ──
 
 @pytest.fixture
-def client():
+def client(tmp_path):
     from src.app import create_app
-    app = create_app()
+    app = create_app(db_path=tmp_path / "test.db")
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c

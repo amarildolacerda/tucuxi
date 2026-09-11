@@ -1271,20 +1271,25 @@ class EventStorage:
     # ── Sensitivity ──
 
     def get_camera_sensitivity(self, camera_id):
-        """Retorna sensitivity config para uma câmera. Default: medium."""
+        """Retorna sensitivity config para uma câmera. Default: medium.
+
+        ``configured`` é True quando existe registro para a câmera; quando False,
+        o nível "medium" é apenas o fallback e os parâmetros efetivos devem vir
+        do ambiente (env vars / defaults), conforme SPEC §8.1/§8.2.
+        """
         with self.lock:
             cursor = self.connection.cursor()
             cursor.execute("SELECT level, custom_params FROM camera_sensitivity WHERE camera_id = ?", (camera_id,))
             row = cursor.fetchone()
         if row is None:
-            return {"level": "medium", "custom_params": None}
+            return {"level": "medium", "custom_params": None, "configured": False}
         custom = None
         if row["custom_params"]:
             try:
                 custom = json.loads(row["custom_params"])
             except (json.JSONDecodeError, TypeError):
                 custom = None
-        return {"level": row["level"], "custom_params": custom}
+        return {"level": row["level"], "custom_params": custom, "configured": True}
 
     def set_camera_sensitivity(self, camera_id, level, custom_params=None):
         """Define sensitivity level para uma câmera. Upsert."""
