@@ -742,6 +742,7 @@ def main():
         import paho.mqtt.client as _mqtt
         import json as _json
         from .predictor.predictor import ha_client as _hc
+        logger.info("Creating predictor MQTT client (broker=%s port=%s user=%s)", MQTT_BROKER_URL, MQTT_BROKER_PORT, MQTT_USERNAME)
         _mqtt_client_sub = _mqtt.Client()
         if MQTT_USERNAME and MQTT_PASSWORD:
             _mqtt_client_sub.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
@@ -763,7 +764,7 @@ def main():
                     from .alerts import alarm_mode_telegram_handler
                     alarm_mode_telegram_handler(payload)
                     # Publish to Alarm Mode sensor topic so HA updates
-                    client.publish("tucuxi/ha/alarm_mode", json.dumps({"alarm_mode": mode}), qos=1, retain=True)
+                    client.publish("tucuxi/ha/alarm_mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
             except Exception:
                 pass
 
@@ -771,51 +772,80 @@ def main():
             """Handle Tucuxi Alarme switch toggle - update Alarm Mode sensor."""
             try:
                 raw = msg.payload.decode()
+                logger.info("Received alarme set message: topic=%s payload=%s", msg.topic, raw)
                 payload = raw.strip().upper() if raw else None
-                # Map switch payload to alarm mode: ON -> armed_home, OFF -> disarmed
-                if payload == "ON":
+                # Track alarme switch state
+                _predictor._alarme_on = (payload == "ON")
+                # Publish alarme state back so HA switch reflects it
+                client.publish("tucuxi/mode/alarme/state", payload, qos=1, retain=True)
+                # Alarme OFF = turn off viagem too
+                if not _predictor._alarme_on:
+                    _predictor._viagem_on = False
+                    client.publish("tucuxi/mode/viagem/state", "OFF", qos=1, retain=True)
+                # Derive alarm mode from both switches
+                alarme_on = _predictor._alarme_on
+                viagem_on = _predictor._viagem_on
+                if viagem_on:
+                    mode = "armed_away"
+                elif alarme_on:
                     mode = "armed_home"
-                elif payload == "OFF":
-                    mode = "disarmed"
                 else:
-                    mode = None
-                if mode and mode in _hc.VALID_MODES:
+                    mode = "disarmed"
+                if mode in _hc.VALID_MODES:
                     _predictor.set_alarm_mode(mode, "")
-                    # Publish to Alarm Mode sensor topic so HA updates
-                    client.publish("tucuxi/ha/alarm_mode", json.dumps({"alarm_mode": mode}), qos=1, retain=True)
-            except Exception:
-                pass
+                    client.publish("tucuxi/ha/alarm_mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
+                    logger.info("Alarm mode updated to %s (alarme=%s, viagem=%s)", mode, alarme_on, viagem_on)
+            except Exception as e:
+                logger.exception("Error in _on_alarme_set_msg")
 
         def _on_viagem_set_msg(client, userdata, msg):
-            """Handle Tucuxi Viagem switch toggle - update Viagem sensor."""
+            """Handle Tucuxi Viagem switch toggle - update Alarm Mode sensor."""
             try:
                 raw = msg.payload.decode()
+                logger.info("Received viagem set message: topic=%s payload=%s", msg.topic, raw)
                 payload = raw.strip().upper() if raw else None
-                # Map switch payload to alarm mode: ON -> armed_away, OFF -> disarmed
-                if payload == "ON":
+                # Track viagem switch state
+                _predictor._viagem_on = (payload == "ON")
+                # Publish viagem state back so HA switch reflects it
+                client.publish("tucuxi/mode/viagem/state", payload, qos=1, retain=True)
+                # Derive alarm mode from both switches
+                alarme_on = _predictor._alarme_on
+                viagem_on = _predictor._viagem_on
+                if viagem_on:
                     mode = "armed_away"
-                elif payload == "OFF":
-                    mode = "disarmed"
+                elif alarme_on:
+                    mode = "armed_home"
                 else:
-                    mode = None
-                if mode and mode in _hc.VALID_MODES:
+                    mode = "disarmed"
+                if mode in _hc.VALID_MODES:
                     _predictor.set_alarm_mode(mode, "")
-                    # Publish to Viagem state topic so HA updates
-                    client.publish("tucuxi/mode/viagem/state", payload, qos=1, retain=True)
-            except Exception:
-                pass
+                    client.publish("tucuxi/ha/alarm_mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
+                    logger.info("Alarm mode updated to %s (alarme=%s, viagem=%s)", mode, alarme_on, viagem_on)
+            except Exception as e:
+                logger.exception("Error in _on_viagem_set_msg")
 
         _mqtt_client_sub.on_message = _on_alarm_msg
         _mqtt_client_sub.message_callback_add("tucuxi/mode/alarme/set", _on_alarme_set_msg)
         _mqtt_client_sub.message_callback_add("tucuxi/mode/viagem/set", _on_viagem_set_msg)
-        _mqtt_client_sub.connect_async(MQTT_BROKER_URL, MQTT_BROKER_PORT, keepalive=10)
-        _mqtt_client_sub.loop_start()
-        _mqtt_client_sub.subscribe("tucuxi/ha/alarm_mode")
-        logger.info("Predictor subscribed to tucuxi/ha/alarm_mode")
 
-        # Subscribe to switch command topic so Alarm Mode sensor updates when toggle
-        _mqtt_client_sub.subscribe("tucuxi/mode/alarme/set")
-        logger.info("Predictor subscribed to tucuxi/mode/alarme/set (updates Alarm Mode sensor)")
+        def _on_sub_connect(client, userdata, flags, rc):
+            if rc == 0:
+                logger.info("Predictor MQTT connected (rc=%s), subscribing...", rc)
+                client.subscribe("tucuxi/mode/alarme/set")
+                client.subscribe("tucuxi/mode/viagem/set")
+                client.subscribe("tucuxi/mode/viagem/state")
+                logger.info("Predictor MQTT subscriptions active")
+            else:
+                logger.error("Predictor MQTT connect failed rc=%s", rc)
+
+        def _on_sub_disconnect(client, userdata, rc):
+            logger.warning("Predictor MQTT disconnected rc=%s", rc)
+
+        _mqtt_client_sub.on_connect = _on_sub_connect
+        _mqtt_client_sub.on_disconnect = _on_sub_disconnect
+        _mqtt_client_sub.connect_async(MQTT_BROKER_URL, MQTT_BROKER_PORT, keepalive=60)
+        _mqtt_client_sub.loop_start()
+        logger.info("Predictor MQTT loop started, waiting for connection...")
 
         # Subscribe to viagem switch command topic so Viagem sensor updates when toggle
         _mqtt_client_sub.subscribe("tucuxi/mode/viagem/set")
