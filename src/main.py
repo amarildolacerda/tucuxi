@@ -844,7 +844,6 @@ def main():
                 logger.info("Predictor MQTT connected (rc=%s), subscribing...", rc)
                 client.subscribe("tucuxi/mode/alarme/set")
                 client.subscribe("tucuxi/mode/viagem/set")
-                client.subscribe("tucuxi/mode/viagem/state")
                 logger.info("Predictor MQTT subscriptions active")
             else:
                 logger.error("Predictor MQTT connect failed rc=%s", rc)
@@ -857,12 +856,6 @@ def main():
         _mqtt_client_sub.connect_async(MQTT_BROKER_URL, MQTT_BROKER_PORT, keepalive=60)
         _mqtt_client_sub.loop_start()
         logger.info("Predictor MQTT loop started, waiting for connection...")
-
-        # Subscribe to viagem switch command topic so Viagem sensor updates when toggle
-        _mqtt_client_sub.subscribe("tucuxi/mode/viagem/set")
-        logger.info("Predictor subscribed to tucuxi/mode/viagem/set (updates Viagem sensor)")
-        _mqtt_client_sub.subscribe("tucuxi/mode/viagem/state")
-        logger.info("Predictor subscribed to tucuxi/mode/viagem/state (updates Viagem sensor state)")
 
         # Auto-discovery: register predictor entities in HA via MQTT
         mqtt_register_predictor_entities()
