@@ -7,6 +7,13 @@ let previewLoadToken = 0;
 let previewDebounceTimer = null;
 let previewNote = 'add';
 let cameraEditId = null;
+let selectedSensitivityLevel = 'default';
+const SENSITIVITY_DESCS = {
+  default: 'Usa a configuração geral do sistema (.env).',
+  low: 'Menos alertas. Ideal para áreas movimentadas.',
+  medium: 'Equilibrado. Padrão para uso geral.',
+  high: 'Mais alertas. Ideal para perímetros críticos.',
+};
 
 // ── Polygon editor state ─────────────────────────────────────────
 // All coordinates stored in IMAGE space (camera resolution).
@@ -656,6 +663,15 @@ function setCameraFormMode(mode, camera = null) {
     maskInput.value = camera && camera.mask_polygons ? JSON.stringify(camera.mask_polygons) : '';
   }
 
+  if (mode === 'edit' && camera) {
+    fetch(`/api/cameras/${camera.id}/sensitivity`)
+      .then(r => r.json())
+      .then(data => initCameraSensitivity(data.level || 'default'))
+      .catch(() => initCameraSensitivity('default'));
+  } else {
+    initCameraSensitivity('default');
+  }
+
   if (message) {
     message.textContent = '';
     message.classList.remove('error');
@@ -689,6 +705,23 @@ function hideCameraForm() {
 function resetCameraList() {
   const cameraTiles = document.getElementById('camera-tiles');
   if (cameraTiles) delete cameraTiles.dataset.rendered;
+}
+
+function initCameraSensitivity(currentLevel = 'default') {
+  selectedSensitivityLevel = currentLevel;
+  document.querySelectorAll('#camera-sensitivity .sensitivity-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sensitivityLevel === currentLevel);
+  });
+  const desc = document.getElementById('camera-sensitivity-desc');
+  if (desc) desc.textContent = SENSITIVITY_DESCS[currentLevel] || '';
+}
+
+function bindSensitivityButtons() {
+  document.querySelectorAll('#camera-sensitivity .sensitivity-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      initCameraSensitivity(btn.dataset.sensitivityLevel);
+    });
+  });
 }
 
 async function submitCameraForm(event) {
@@ -770,6 +803,16 @@ async function submitCameraForm(event) {
       message.textContent = error.error || 'Falha ao salvar câmera.';
       message.classList.add('error');
       return;
+    }
+
+    const saved = await response.json();
+    const camId = cameraEditId || saved.id;
+    if (camId) {
+      await fetch(`/api/cameras/${camId}/sensitivity`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: selectedSensitivityLevel }),
+      });
     }
 
     hideCameraForm();
@@ -972,6 +1015,7 @@ function setupCameraForm() {
   });
 
   setupPolyEditorButtons();
+  bindSensitivityButtons();
 }
 
 async function refreshCameras() {
