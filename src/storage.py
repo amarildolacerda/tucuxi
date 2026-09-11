@@ -180,6 +180,18 @@ class EventStorage:
                 )
                 """
             )
+            # ── Sensitivity table ──
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS camera_sensitivity (
+                    camera_id INTEGER PRIMARY KEY,
+                    level TEXT NOT NULL DEFAULT 'medium',
+                    custom_params TEXT,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (camera_id) REFERENCES cameras(id)
+                )
+                """
+            )
             # ── Auth tables ──
             cursor.execute(
                 """
@@ -1255,6 +1267,38 @@ class EventStorage:
                     except (ValueError, TypeError):
                         pass
             return rows
+
+    # ── Sensitivity ──
+
+    def get_camera_sensitivity(self, camera_id):
+        """Retorna sensitivity config para uma câmera. Default: medium."""
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT level, custom_params FROM camera_sensitivity WHERE camera_id = ?", (camera_id,))
+            row = cursor.fetchone()
+        if row is None:
+            return {"level": "medium", "custom_params": None}
+        custom = None
+        if row["custom_params"]:
+            try:
+                custom = json.loads(row["custom_params"])
+            except (json.JSONDecodeError, TypeError):
+                custom = None
+        return {"level": row["level"], "custom_params": custom}
+
+    def set_camera_sensitivity(self, camera_id, level, custom_params=None):
+        """Define sensitivity level para uma câmera. Upsert."""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        custom_json = json.dumps(custom_params) if custom_params is not None else None
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "INSERT INTO camera_sensitivity (camera_id, level, custom_params, updated_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(camera_id) DO UPDATE SET level = excluded.level, custom_params = excluded.custom_params, updated_at = excluded.updated_at",
+                (camera_id, level, custom_json, now),
+            )
+            self.connection.commit()
 
     def close(self):
         with self.lock:
