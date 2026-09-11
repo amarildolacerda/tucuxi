@@ -86,28 +86,6 @@ def test_unregister_worker(tmp_path):
     assert camera["id"] not in mgr._workers
 
 
-def test_custom_params_applied_to_worker(tmp_path):
-    """Custom params should be applied to the worker correctly."""
-    storage = _storage(tmp_path)
-    storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
-    camera = storage.list_cameras()[0]
-    custom = {"motion_min_area": 4000, "motion_persist_frames": 3, "detector_confidence": 0.35, "detector_iou": 0.42, "track_iou_threshold": 0.28}
-    storage.set_camera_sensitivity(camera["id"], "custom", custom)
-    mgr = SensitivityManager(storage)
-    mock_worker = MagicMock()
-    mock_worker._motion_detector_ref = MagicMock()
-    mock_worker.object_detector = MagicMock()
-    mock_worker._tracker_ref = MagicMock()
-    mgr.register_worker(camera["id"], mock_worker)
-    params = mgr.get_effective_params(camera["id"])
-    mgr.apply_to_workers(camera["id"], params)
-    assert mock_worker._motion_detector_ref.min_area == 4000
-    assert mock_worker._motion_detector_ref.persist_frames == 3
-    assert mock_worker.object_detector.confidence_threshold == 0.35
-    assert mock_worker.object_detector.iou_threshold == 0.42
-    assert mock_worker._tracker_ref.iou_threshold == 0.28
-
-
 # ── API tests ──
 
 @pytest.fixture
@@ -120,49 +98,46 @@ def client(tmp_path):
 
 
 def test_api_get_sensitivity(client):
-    """GET /api/cameras/1/sensitivity returns current level."""
     resp = client.get("/api/cameras/1/sensitivity")
     assert resp.status_code == 200
     data = resp.get_json()
-    assert "level" in data
+    assert data["level"] == "default"
     assert "effective_params" in data
+    assert "custom_params" not in data
 
 
 def test_api_set_sensitivity_high(client):
-    """PUT /api/cameras/1/sensitivity sets level."""
     resp = client.put("/api/cameras/1/sensitivity", json={"level": "high"})
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["level"] == "high"
+    assert "custom_params" not in data
 
 
-def test_api_set_sensitivity_custom(client):
-    """PUT /api/cameras/1/sensitivity with custom params."""
-    custom = {"motion_min_area": 4000, "motion_persist_frames": 3, "detector_confidence": 0.35, "detector_iou": 0.42, "track_iou_threshold": 0.28}
-    resp = client.put("/api/cameras/1/sensitivity", json={"level": "custom", "custom_params": custom})
+def test_api_set_sensitivity_default(client):
+    client.put("/api/cameras/1/sensitivity", json={"level": "high"})
+    resp = client.put("/api/cameras/1/sensitivity", json={"level": "default"})
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data["level"] == "custom"
-    assert data["effective_params"] == custom
+    assert data["level"] == "default"
+    assert data["effective_params"] == CONFIG_DEFAULT_PARAMS
 
 
 def test_api_set_sensitivity_invalid_level(client):
-    """PUT with invalid level returns 400."""
     resp = client.put("/api/cameras/1/sensitivity", json={"level": "invalid"})
     assert resp.status_code == 400
 
 
-def test_api_set_sensitivity_custom_without_params(client):
-    """PUT custom without custom_params returns 400."""
+def test_api_set_sensitivity_custom_rejected(client):
     resp = client.put("/api/cameras/1/sensitivity", json={"level": "custom"})
     assert resp.status_code == 400
 
 
 def test_api_presets(client):
-    """GET /api/sensitivity/presets returns all presets."""
     resp = client.get("/api/sensitivity/presets")
     assert resp.status_code == 200
     data = resp.get_json()
     assert "low" in data
     assert "medium" in data
     assert "high" in data
+    assert "default" not in data
