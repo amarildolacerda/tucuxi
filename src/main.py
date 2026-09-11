@@ -96,6 +96,7 @@ class CameraWorker:
         # Sensitivity refs (set by SensitivityManager for real-time updates)
         self._motion_detector_ref = None
         self._tracker_ref = None
+        self._pending_sensitivity = None
         # Estado de gravação de clipe (instância p/ start_clip e o loop contínuo)
         self._frame_buffer = None
         self._frame = None
@@ -295,6 +296,19 @@ class CameraWorker:
         # Expose refs for real-time sensitivity updates
         self._motion_detector_ref = motion_detector
         self._tracker_ref = tracker
+        # Apply any pending sensitivity that was set before run() started
+        if self._pending_sensitivity:
+            from .sensitivity import SensitivityManager
+            # Directly apply params to the freshly created refs
+            md = self._motion_detector_ref
+            od = self.object_detector
+            tr = self._tracker_ref
+            md.min_area = self._pending_sensitivity["motion_min_area"]
+            md.persist_frames = self._pending_sensitivity["motion_persist_frames"]
+            od.confidence_threshold = self._pending_sensitivity["detector_confidence"]
+            od.iou_threshold = self._pending_sensitivity["detector_iou"]
+            tr.iou_threshold = self._pending_sensitivity["track_iou_threshold"]
+            self._pending_sensitivity = None
         last_motion_time = None
         no_motion_alerted = False
         # True apenas quando um evento de movimento/atividade foi efetivamente

@@ -257,15 +257,81 @@ class EventStorage:
                 )
                 """
             )
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS user_cameras (
-                    user_id INTEGER NOT NULL REFERENCES users(id),
-                    camera_id INTEGER NOT NULL REFERENCES cameras(id),
-                    PRIMARY KEY (user_id, camera_id)
-                )
-                """
-            )
+            # ── Migration: ensure all tables exist for older DBs ──
+            existing_tables = {row[0] for row in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+            _required_tables = {
+                "users": """
+                    CREATE TABLE users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username TEXT NOT NULL UNIQUE,
+                        password_hash TEXT NOT NULL,
+                        role TEXT NOT NULL CHECK(role IN ('admin','chefe_seguranca','vigilante','viewer')),
+                        created_by INTEGER REFERENCES users(id),
+                        created_at TEXT NOT NULL,
+                        last_login TEXT,
+                        active INTEGER NOT NULL DEFAULT 1
+                    )""",
+                "user_sessions": """
+                    CREATE TABLE user_sessions (
+                        id TEXT PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id),
+                        created_at TEXT NOT NULL,
+                        expires_at TEXT NOT NULL,
+                        ip_address TEXT
+                    )""",
+                "role_permissions": """
+                    CREATE TABLE role_permissions (
+                        role TEXT NOT NULL,
+                        permission TEXT NOT NULL,
+                        enabled INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (role, permission)
+                    )""",
+                "settings": """
+                    CREATE TABLE settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    )""",
+                "api_keys": """
+                    CREATE TABLE api_keys (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        key_hash TEXT NOT NULL UNIQUE,
+                        name TEXT NOT NULL,
+                        permissions TEXT,
+                        created_by INTEGER REFERENCES users(id),
+                        created_at TEXT NOT NULL,
+                        last_used TEXT,
+                        active INTEGER NOT NULL DEFAULT 1
+                    )""",
+                "audit_log": """
+                    CREATE TABLE audit_log (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER REFERENCES users(id),
+                        api_key_id INTEGER REFERENCES api_keys(id),
+                        action TEXT NOT NULL,
+                        target_type TEXT,
+                        target_id TEXT,
+                        details TEXT,
+                        ip_address TEXT,
+                        created_at TEXT NOT NULL
+                    )""",
+                "user_cameras": """
+                    CREATE TABLE user_cameras (
+                        user_id INTEGER NOT NULL REFERENCES users(id),
+                        camera_id INTEGER NOT NULL REFERENCES cameras(id),
+                        PRIMARY KEY (user_id, camera_id)
+                    )""",
+                "camera_sensitivity": """
+                    CREATE TABLE camera_sensitivity (
+                        camera_id INTEGER PRIMARY KEY,
+                        level TEXT NOT NULL DEFAULT 'medium',
+                        custom_params TEXT,
+                        updated_at TEXT NOT NULL,
+                        FOREIGN KEY (camera_id) REFERENCES cameras(id)
+                    )""",
+            }
+            for table_name, ddl in _required_tables.items():
+                if table_name not in existing_tables:
+                    cursor.execute(ddl)
             self.connection.commit()
 
     def add_event(self, camera_id, zone, event_type, details=None, level=0, source="local", dropped=False):
