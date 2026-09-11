@@ -42,6 +42,30 @@ def test_status_route(client):
     assert isinstance(body["cameras"], list)
 
 
+def test_settings_section_renders_sensitivity_config(client):
+    response = client.get("/section/settings")
+    assert response.status_code == 200
+    assert b"sensitivity-config" in response.data
+
+
+def test_settings_js_no_slider_strings(client):
+    # Busca o JS servido na rota de static
+    resp = client.get("/static/sections/settings.js")
+    assert resp.status_code == 200
+    js = resp.get_data(as_text=True)
+    # Nada de sliders customizados
+    assert "SLIDER_DEFS" not in js
+    assert "range" not in js
+    assert "saveCustom" not in js
+
+
+def test_settings_js_has_default_profile(client):
+    resp = client.get("/static/sections/settings.js")
+    js = resp.get_data(as_text=True)
+    assert "default" in js
+    assert "'Padrão'" in js or '"Padrão"' in js
+
+
 def test_workers_route(client):
     response = client.get("/workers")
     assert response.status_code == 200

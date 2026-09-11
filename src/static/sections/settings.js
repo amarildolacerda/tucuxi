@@ -154,31 +154,21 @@ function setupSettings() {
   });
 }
 
-const LEVEL_LABELS = { low: 'Baixa', medium: 'Média', high: 'Alta', custom: 'Personalizado' };
+const LEVEL_LABELS = { default: 'Padrão', low: 'Baixa', medium: 'Média', high: 'Alta' };
 const LEVEL_DESCS = {
+  default: 'Usa a configuração geral do sistema (.env).',
   low: 'Menos alertas. Ideal para áreas movimentadas.',
   medium: 'Equilibrado. Padrão para uso geral.',
   high: 'Mais alertas. Ideal para perímetros críticos.',
-  custom: 'Ajuste manual de cada parâmetro.',
 };
-const SLIDER_DEFS = [
-  { key: 'motion_min_area', label: 'Área mínima de movimento', min: 1000, max: 15000, step: 500, unit: 'px' },
-  { key: 'motion_persist_frames', label: 'Frames de persistência', min: 1, max: 8, step: 1, unit: 'frames' },
-  { key: 'detector_confidence', label: 'Confiança da IA', min: 0.10, max: 0.80, step: 0.05, unit: '' },
-  { key: 'detector_iou', label: 'NMS (sobreposição)', min: 0.20, max: 0.70, step: 0.05, unit: '' },
-  { key: 'track_iou_threshold', label: 'Limiar de rastreamento', min: 0.10, max: 0.60, step: 0.05, unit: '' },
-];
 
 async function renderSensitivityConfig() {
   const container = document.getElementById('sensitivity-config');
   if (!container) return;
   try {
-    const [presets, camerasResp] = await Promise.all([
-      fetch('/api/sensitivity/presets').then(r => r.json()),
-      fetch('/api/cameras').then(r => r.json()),
-    ]);
-    const cameras = camerasResp.cameras || camerasResp;
-    if (!cameras.length) {
+    const resp = await fetch('/api/cameras');
+    const list = await resp.json();
+    if (!list.length) {
       container.textContent = 'Nenhuma câmera configurada.';
       return;
     }
@@ -186,7 +176,7 @@ async function renderSensitivityConfig() {
     const section = document.createElement('div');
     section.className = 'sensitivity-section';
 
-    for (const cam of cameras) {
+    for (const cam of list) {
       const camDiv = document.createElement('div');
       camDiv.className = 'config-module-group sensitivity-camera-group';
 
@@ -197,63 +187,24 @@ async function renderSensitivityConfig() {
       const currentResp = await fetch(`/api/cameras/${cam.id}/sensitivity`);
       const current = await currentResp.json();
 
-      // Selector buttons
       const selector = document.createElement('div');
       selector.className = 'sensitivity-selector';
       for (const [val, label] of Object.entries(LEVEL_LABELS)) {
         const btn = document.createElement('button');
-        btn.className = 'button-mini sensitivity-btn' + (current.level === val ? ' active' : '');
+        btn.type = 'button';
+        btn.className = `button-mini sensitivity-btn${current.level === val ? ' active' : ''}`;
+        btn.dataset.sensitivityLevel = val;
         btn.textContent = label;
-        btn.title = LEVEL_DESCS[val];
         btn.addEventListener('click', () => selectLevel(cam.id, val, camDiv));
         selector.appendChild(btn);
       }
       camDiv.appendChild(selector);
 
-      // Description
       const desc = document.createElement('p');
       desc.className = 'sensitivity-desc';
       desc.textContent = LEVEL_DESCS[current.level] || '';
       camDiv.appendChild(desc);
 
-      // Custom sliders (hidden by default)
-      const slidersDiv = document.createElement('div');
-      slidersDiv.className = 'sensitivity-sliders' + (current.level === 'custom' ? '' : ' hidden');
-      slidersDiv.id = `sensitivity-sliders-${cam.id}`;
-
-      const params = current.effective_params;
-      for (const sd of SLIDER_DEFS) {
-        const row = document.createElement('div');
-        row.className = 'slider-row';
-        const label = document.createElement('label');
-        label.textContent = sd.label;
-        const input = document.createElement('input');
-        input.type = 'range';
-        input.min = sd.min;
-        input.max = sd.max;
-        input.step = sd.step;
-        input.value = params[sd.key];
-        input.dataset.key = sd.key;
-        const valueSpan = document.createElement('span');
-        valueSpan.className = 'slider-value';
-        valueSpan.textContent = params[sd.key] + (sd.unit ? ' ' + sd.unit : '');
-        input.addEventListener('input', () => {
-          valueSpan.textContent = input.value + (sd.unit ? ' ' + sd.unit : '');
-        });
-        row.appendChild(label);
-        row.appendChild(input);
-        row.appendChild(valueSpan);
-        slidersDiv.appendChild(row);
-      }
-
-      // Save custom button
-      const saveBtn = document.createElement('button');
-      saveBtn.className = 'button-primary';
-      saveBtn.textContent = 'Salvar personalizado';
-      saveBtn.addEventListener('click', () => saveCustom(cam.id, slidersDiv));
-      slidersDiv.appendChild(saveBtn);
-
-      camDiv.appendChild(slidersDiv);
       section.appendChild(camDiv);
     }
 
@@ -264,39 +215,16 @@ async function renderSensitivityConfig() {
 }
 
 async function selectLevel(cameraId, level, camDiv) {
-  // Update active button
-  camDiv.querySelectorAll('.sensitivity-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.textContent === LEVEL_LABELS[level]);
-  });
-  // Show/hide sliders
-  const slidersDiv = camDiv.querySelector('.sensitivity-sliders');
-  if (slidersDiv) {
-    slidersDiv.classList.toggle('hidden', level !== 'custom');
-    if (level !== 'custom') {
-      await fetch(`/api/cameras/${cameraId}/sensitivity`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ level }),
-      });
-    }
-  }
-}
-
-async function saveCustom(cameraId, slidersDiv) {
-  const params = {};
-  slidersDiv.querySelectorAll('input[type="range"]').forEach(input => {
-    params[input.dataset.key] = parseFloat(input.value);
-  });
+  const desc = camDiv.querySelector('.sensitivity-desc');
+  if (desc) desc.textContent = LEVEL_DESCS[level] || '';
   const resp = await fetch(`/api/cameras/${cameraId}/sensitivity`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ level: 'custom', custom_params: params }),
+    body: JSON.stringify({ level }),
   });
   if (!resp.ok) {
-    const err = await resp.json();
-    showMenuMessage(err.error || 'Erro ao salvar', 'camera-form-message');
-  } else {
-    showMenuMessage('Sensibilidade salva', 'camera-form-message');
+    const err = await resp.json().catch(() => ({}));
+    if (desc) desc.textContent = `Erro: ${err.error || 'falha ao salvar'}`;
   }
 }
 
