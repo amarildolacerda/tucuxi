@@ -19,6 +19,8 @@ Construir um sistema de vigilância inteligente inicialmente desenvolvido em PC/
 - Capturar streams RTSP/HTTP de câmeras IP.
 - Detectar movimento em cada stream.
 - Classificar objetos em pessoas, veículos e animais.
+- Permitir ao usuário ajustar sensibilidade de detecção com presets prontos ou configuração manual.
+- Aplicar configuração de sensibilidade por câmera em tempo real.
 - Configurar zonas de interesse e horários sensíveis.
 - Gerar alertas quando regras de segurança forem violadas.
 - Registrar eventos com timestamp, câmera, tipo de evento e imagem de evidência.
@@ -76,6 +78,7 @@ Construir um sistema de vigilância inteligente inicialmente desenvolvido em PC/
 ## 🛠️ Funcionalidades principais
 - Detecção de movimento por câmera.
 - Classificação de objetos em categorias chave.
+- Configuração de sensibilidade por câmera com presets (Baixa/Média/Alta) e modo Personalizado.
 - Zonas de interesse personalizáveis (entrada, quintal, garagem).
 - Regras de alerta baseadas em área, categoria e horário.
 - Visualização de câmeras ao vivo e histórico de eventos.
