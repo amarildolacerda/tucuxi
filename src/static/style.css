@@ -2133,3 +2133,17 @@ tr.event-info td {
 .retention-actions .form-message {
   margin-top: 0;
 }
+
+/* ── Sensitivity Presets ── */
+.sensitivity-section { margin-top: 1rem; }
+.sensitivity-camera-group { margin-bottom: 1.5rem; }
+.sensitivity-selector { display: flex; gap: 0.5rem; margin: 0.5rem 0; }
+.sensitivity-btn { flex: 1; padding: 0.5rem; text-align: center; font-size: 0.85rem; }
+.sensitivity-btn.active { background: var(--primary); color: #fff; }
+.sensitivity-desc { font-size: 0.85rem; color: var(--muted); margin: 0.25rem 0 0.75rem; }
+.sensitivity-sliders { display: flex; flex-direction: column; gap: 0.75rem; }
+.slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.slider-row label { flex: 0 0 200px; font-size: 0.85rem; }
+.slider-row input[type="range"] { flex: 1; }
+.slider-row .slider-value { flex: 0 0 60px; text-align: right; font-size: 0.85rem; }
+.hidden { display: none; }
