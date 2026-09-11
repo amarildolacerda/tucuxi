@@ -186,7 +186,7 @@ def mqtt_handler(payload: Dict):
             safe_id = f"secur_cam{cam_id}"
             publish.single(f"secur/{safe_id}/alert_state", payload=json.dumps(payload), hostname=broker, port=port, retain=True)
             publish.single(f"secur/{safe_id}/alert", payload=json.dumps(payload), hostname=broker, port=port, retain=True)
-            if payload.get("event_type") in ("motion_detected", "object_detected"):
+            if payload.get("event_type") in ("motion_detected", "object_detected", "snapshot_info"):
                 publish.single(f"secur/{safe_id}/state", payload="motion", hostname=broker, port=port, retain=True)
             elif payload.get("event_type") == "no_motion":
                 publish.single(f"secur/{safe_id}/state", payload="idle", hostname=broker, port=port, retain=True)
@@ -227,7 +227,7 @@ def mqtt_handler(payload: Dict):
                 safe_id = f"secur_cam{cam_id}"
                 client.publish(f"secur/{safe_id}/alert_state", json.dumps(payload), qos=0, retain=False)
                 client.publish(f"secur/{safe_id}/alert", json.dumps(payload), qos=0, retain=False)
-                if payload.get("event_type") in ("motion_detected", "object_detected"):
+                if payload.get("event_type") in ("motion_detected", "object_detected", "snapshot_info"):
                     client.publish(f"secur/{safe_id}/state", "motion", qos=0, retain=True)
                 elif payload.get("event_type") == "no_motion":
                     client.publish(f"secur/{safe_id}/state", "idle", qos=0, retain=True)

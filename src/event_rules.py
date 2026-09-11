@@ -87,17 +87,17 @@ def format_detections(detections):
 
 RULES = [
     {"when": {"event_type": ["intruder_detected", "fall_detected"]},
-     "then": {"alert": ["telegram", "mqtt", "ha"], "disposition": "alert"}},
+     "then": {"alert": ["telegram", "automation"], "disposition": "alert"}},
     {"when": {"event_type": ["identity_recognized"]},
-     "then": {"alert": ["telegram", "mqtt"], "disposition": "alert"}},
+     "then": {"alert": ["telegram", "automation"], "disposition": "alert"}},
     {"when": {"event_type": ["loitering", "direction_change"], "zone_classification": ["private", "security"]},
-     "then": {"alert": ["telegram", "mqtt", "ha"], "disposition": "alert"}},
+     "then": {"alert": ["telegram", "automation"], "disposition": "alert"}},
     {"when": {"event_type": ["motion_detected", "snapshot_info"]},
-     "then": {"alert": ["telegram"], "disposition": "alert"}},
+     "then": {"alert": ["telegram", "automation"], "disposition": "alert"}},
     {"when": {"no_motion": True},
-     "then": {"alert": ["telegram"], "disposition": "alert"}},
+     "then": {"alert": ["telegram", "automation"], "disposition": "alert"}},
     {"when": {"event_type": ["flood", "water_leak", "sensor_alert"]},
-     "then": {"alert": ["telegram", "mqtt", "ha"], "disposition": "alert"}},
+     "then": {"alert": ["telegram", "automation"], "disposition": "alert"}},
 ]
 
 
