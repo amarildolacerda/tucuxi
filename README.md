@@ -30,6 +30,7 @@ O tucuxi é o golfinho de rio amazônico que enxerga por ecolocalização: perce
 - Atuação externa automática: em evento crítico, aciona sirene/dispositivo via MQTT/Home Assistant
 - Dashboard web com visualização ao vivo e histórico de eventos
 - Privacidade: mascaramento de regiões, modo privacidade e retenção seletiva
+- Configuração de sensibilidade por câmera com perfis **Baixa**, **Média**, **Alta** e **Padrão** (usa a configuração geral do `.env`), configurável no cadastro da câmera e em Configurações
 - Base pronta para situações avançadas: fogo/fumaça, alagamento, objetos abandonados, aglomeração (veja o roadmap)
 
 ## Para quem é
