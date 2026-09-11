@@ -125,7 +125,7 @@ class SensitivityManager:
             error = validate_custom_params(custom_params)
             if error:
                 return error
-        self.storage.set_camera_sensitivity(camera_id, level, custom_params)
+        self.storage.set_camera_sensitivity(camera_id, level)
         params = self.get_effective_params(camera_id)
         self.apply_to_workers(camera_id, params)
         logger.info("Sensitivity for camera %s set to %s", camera_id, level)
