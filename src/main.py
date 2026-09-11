@@ -60,7 +60,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize Telegram on startup - verify bot is alive
-init_telegram()
+# Only send in main process, not in werkzeug reloader subprocess
+if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+    init_telegram()
 
 
 def _worker_healthy(last_frame_time, now, timeout):
@@ -760,9 +762,14 @@ def main():
                     ts = ""
                 if mode:
                     _predictor.set_alarm_mode(mode, ts)
-                    # Send Telegram notification on mode change
-                    from .alerts import alarm_mode_telegram_handler
-                    alarm_mode_telegram_handler(payload)
+                    # Skip Telegram notification on first message (startup sync)
+                    if _alarm_msg_first[0]:
+                        _alarm_msg_first[0] = False
+                        logger.info("Startup sync: skipping Telegram notification for %s", mode)
+                    else:
+                        # Send Telegram notification on mode change
+                        from .alerts import alarm_mode_telegram_handler
+                        alarm_mode_telegram_handler(payload)
                     # Publish to Alarm Mode sensor topic so HA updates
                     client.publish("tucuxi/ha/alarm_mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
             except Exception:
@@ -794,6 +801,7 @@ def main():
                 if mode in _hc.VALID_MODES:
                     _predictor.set_alarm_mode(mode, "")
                     client.publish("tucuxi/ha/alarm_mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
+                    alarm_mode_telegram_handler({"alarm_mode": mode})
                     logger.info("Alarm mode updated to %s (alarme=%s, viagem=%s)", mode, alarme_on, viagem_on)
             except Exception as e:
                 logger.exception("Error in _on_alarme_set_msg")
@@ -820,6 +828,7 @@ def main():
                 if mode in _hc.VALID_MODES:
                     _predictor.set_alarm_mode(mode, "")
                     client.publish("tucuxi/ha/alarm_mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
+                    alarm_mode_telegram_handler({"alarm_mode": mode})
                     logger.info("Alarm mode updated to %s (alarme=%s, viagem=%s)", mode, alarme_on, viagem_on)
             except Exception as e:
                 logger.exception("Error in _on_viagem_set_msg")
@@ -828,6 +837,8 @@ def main():
         _mqtt_client_sub.message_callback_add("tucuxi/mode/alarme/set", _on_alarme_set_msg)
         _mqtt_client_sub.message_callback_add("tucuxi/mode/viagem/set", _on_viagem_set_msg)
 
+        # Skip first alarm_mode message (startup sync) to avoid duplicate Telegram notification
+        _alarm_msg_first = [True]
         def _on_sub_connect(client, userdata, flags, rc):
             if rc == 0:
                 logger.info("Predictor MQTT connected (rc=%s), subscribing...", rc)
