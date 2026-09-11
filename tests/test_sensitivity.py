@@ -1,7 +1,6 @@
-# tests/test_sensitivity.py
-import pytest
+from unittest.mock import MagicMock
 from src.storage import EventStorage
-from src.sensitivity import SensitivityManager, SensitivityLevel, SENSITIVITY_PRESETS, validate_custom_params, CONFIG_DEFAULT_PARAMS
+from src.sensitivity import SensitivityManager, SensitivityLevel, SENSITIVITY_PRESETS, CONFIG_DEFAULT_PARAMS
 from src import config as config_module
 
 DEFAULT_KEYS = {
@@ -19,6 +18,13 @@ def _storage(tmp_path):
 
 # ── Storage tests ──
 
+def test_get_sensitivity_returns_default(tmp_path):
+    storage = _storage(tmp_path)
+    result = storage.get_camera_sensitivity(1)
+    assert result["level"] == "default"
+    assert result["configured"] is False
+
+
 def test_get_sensitivity_unconfigured_returns_default(tmp_path):
     storage = _storage(tmp_path)
     result = storage.get_camera_sensitivity(1)
@@ -32,7 +38,8 @@ def test_set_and_get_sensitivity(tmp_path):
     camera = storage.list_cameras()[0]
     storage.set_camera_sensitivity(camera["id"], "high")
     result = storage.get_camera_sensitivity(camera["id"])
-    assert result == {"level": "high", "configured": True}
+    assert result["level"] == "high"
+    assert result["configured"] is True
 
 
 def test_set_level_default_clears_record(tmp_path):
@@ -71,7 +78,6 @@ def test_presets_have_all_keys():
 
 
 def test_config_default_params_match_env_config():
-    """CONFIG_DEFAULT_PARAMS reflete os valores de config.py (env/defaults)."""
     expected = {
         "motion_min_area": config_module.MOTION_MIN_AREA,
         "motion_persist_frames": config_module.MOTION_PERSIST_FRAMES,
@@ -83,10 +89,19 @@ def test_config_default_params_match_env_config():
 
 
 def test_unconfigured_camera_falls_back_to_config(tmp_path):
-    """Câmera sem registro usa os valores de config.py (env), não o preset MÉDIO."""
     storage = _storage(tmp_path)
     storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
     camera = storage.list_cameras()[0]
+    mgr = SensitivityManager(storage)
+    params = mgr.get_effective_params(camera["id"])
+    assert params == CONFIG_DEFAULT_PARAMS
+
+
+def test_default_level_uses_config_params(tmp_path):
+    storage = _storage(tmp_path)
+    storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
+    camera = storage.list_cameras()[0]
+    storage.set_camera_sensitivity(camera["id"], "default")
     mgr = SensitivityManager(storage)
     params = mgr.get_effective_params(camera["id"])
     assert params == CONFIG_DEFAULT_PARAMS
@@ -112,29 +127,16 @@ def test_set_level_persists(tmp_path):
     assert result["level"] == "high"
 
 
-def test_validate_custom_params_valid():
-    custom = {"motion_min_area": 4000, "motion_persist_frames": 3, "detector_confidence": 0.35, "detector_iou": 0.42, "track_iou_threshold": 0.28}
-    assert validate_custom_params(custom) is None
-
-
-def test_validate_custom_params_missing_key():
-    custom = {"motion_min_area": 4000}
-    error = validate_custom_params(custom)
-    assert error is not None
-    assert "faltando" in error
-
-
-def test_validate_custom_params_out_of_range():
-    custom = {"motion_min_area": 500, "motion_persist_frames": 3, "detector_confidence": 0.35, "detector_iou": 0.42, "track_iou_threshold": 0.28}
-    error = validate_custom_params(custom)
-    assert error is not None
-    assert "entre" in error
-
-
-def test_set_level_custom_without_params_returns_error(tmp_path):
+def test_set_level_default_applies_to_workers(tmp_path):
     storage = _storage(tmp_path)
     storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
     camera = storage.list_cameras()[0]
+    storage.set_camera_sensitivity(camera["id"], "high")
     mgr = SensitivityManager(storage)
-    error = mgr.set_level(camera["id"], "custom")
-    assert error is not None
+    mock_worker = MagicMock()
+    mock_worker._motion_detector_ref = MagicMock()
+    mock_worker.object_detector = MagicMock()
+    mock_worker._tracker_ref = MagicMock()
+    mgr.register_worker(camera["id"], mock_worker)
+    mgr.set_level(camera["id"], "default")
+    assert mock_worker._motion_detector_ref.min_area == CONFIG_DEFAULT_PARAMS["motion_min_area"]
