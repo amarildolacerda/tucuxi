@@ -112,17 +112,20 @@ class SensitivityManager:
         worker = self._workers.get(camera_id)
         if worker is None:
             return
-        # Update motion detector
-        if hasattr(worker, '_motion_detector_ref'):
-            md = worker._motion_detector_ref
+        # Update motion detector (may not be initialized yet if run() hasn't started)
+        md = getattr(worker, '_motion_detector_ref', None)
+        if md is not None:
             md.min_area = params["motion_min_area"]
             md.persist_frames = params["motion_persist_frames"]
-        # Update object detector
-        if hasattr(worker, 'object_detector'):
-            od = worker.object_detector
+        # Update object detector (always exists on worker)
+        od = getattr(worker, 'object_detector', None)
+        if od is not None:
             od.confidence_threshold = params["detector_confidence"]
             od.iou_threshold = params["detector_iou"]
-        # Update tracker
-        if hasattr(worker, '_tracker_ref'):
-            tr = worker._tracker_ref
+        # Update tracker (may not be initialized yet)
+        tr = getattr(worker, '_tracker_ref', None)
+        if tr is not None:
             tr.iou_threshold = params["track_iou_threshold"]
+        # If any ref wasn't ready, store as pending so run() can apply it
+        if md is None or tr is None:
+            worker._pending_sensitivity = params
