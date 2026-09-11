@@ -93,6 +93,9 @@ class CameraWorker:
         self._latest_frame_time = None
         self.stop_event = threading.Event()
         self.thread = threading.Thread(target=self.run, daemon=True)
+        # Sensitivity refs (set by SensitivityManager for real-time updates)
+        self._motion_detector_ref = None
+        self._tracker_ref = None
         # Estado de gravação de clipe (instância p/ start_clip e o loop contínuo)
         self._frame_buffer = None
         self._frame = None
@@ -289,6 +292,9 @@ class CameraWorker:
         camera_stream = CameraStream(self.camera["source"])
         motion_detector = MotionDetector(min_area=MOTION_MIN_AREA)
         tracker = IoUTracker(iou_threshold=TRACK_IOU_THRESHOLD, max_age_seconds=TRACK_MAX_AGE_SECONDS)
+        # Expose refs for real-time sensitivity updates
+        self._motion_detector_ref = motion_detector
+        self._tracker_ref = tracker
         last_motion_time = None
         no_motion_alerted = False
         # True apenas quando um evento de movimento/atividade foi efetivamente
@@ -621,12 +627,13 @@ def frames_similar(a, b, threshold):
 
 
 class CameraManager:
-    def __init__(self, storage: EventStorage, alerts: AlertService, object_detector: ObjectDetector, identity_recognizer=None, event_bus=None):
+    def __init__(self, storage: EventStorage, alerts: AlertService, object_detector: ObjectDetector, identity_recognizer=None, event_bus=None, sensitivity_manager=None):
         self.storage = storage
         self.alerts = alerts
         self.object_detector = object_detector
         self.identity_recognizer = identity_recognizer
         self.event_bus = event_bus
+        self.sensitivity_manager = sensitivity_manager
         self.workers = {}
         self.lock = threading.Lock()
         self.monitor_thread = threading.Thread(target=self.monitor_cameras, daemon=True)
@@ -648,6 +655,11 @@ class CameraManager:
                         worker = CameraWorker(camera, self.storage, self.alerts, self.object_detector, self.identity_recognizer, self.event_bus)
                         worker.start()
                         self.workers[cam_id] = worker
+                        # Apply sensitivity from DB
+                        if self.sensitivity_manager:
+                            self.sensitivity_manager.register_worker(cam_id, worker)
+                            params = self.sensitivity_manager.get_effective_params(cam_id)
+                            self.sensitivity_manager.apply_to_workers(cam_id, params)
                     else:
                         worker = self.workers[cam_id]
                         old = worker.camera
@@ -664,6 +676,11 @@ class CameraManager:
                             new_worker = CameraWorker(camera, self.storage, self.alerts, self.object_detector, self.identity_recognizer, self.event_bus)
                             new_worker.start()
                             self.workers[cam_id] = new_worker
+                            if self.sensitivity_manager:
+                                self.sensitivity_manager.unregister_worker(cam_id)
+                                self.sensitivity_manager.register_worker(cam_id, new_worker)
+                                params = self.sensitivity_manager.get_effective_params(cam_id)
+                                self.sensitivity_manager.apply_to_workers(cam_id, params)
 
                 for camera_id in list(active_ids - camera_ids):
                     worker = self.workers.pop(camera_id, None)
@@ -720,7 +737,9 @@ def main():
     else:
         identity_recognizer = build_recognizer(storage)
     event_bus = LocalEventQueue()
-    camera_manager = CameraManager(storage, alerts, object_detector, identity_recognizer, event_bus)
+    from .sensitivity import SensitivityManager
+    sensitivity_manager = SensitivityManager(storage)
+    camera_manager = CameraManager(storage, alerts, object_detector, identity_recognizer, event_bus, sensitivity_manager)
     camera_manager.start()
 
     # Consumidor da fila: AlertRuleEngine decide N2–N4 (persiste, alerta e
