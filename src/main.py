@@ -60,9 +60,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize Telegram on startup - verify bot is alive
-# Only send in main process, not in werkzeug reloader subprocess
-if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-    init_telegram()
+init_telegram()
 
 
 def _worker_healthy(last_frame_time, now, timeout):
@@ -886,4 +884,4 @@ def main():
     ])
 
     app = create_app(camera_manager=camera_manager, alerts=alerts, event_bus=event_bus)
-    app.run(host=SERVER_HOST, port=SERVER_PORT, debug=True)
+    app.run(host=SERVER_HOST, port=SERVER_PORT, debug=True, use_reloader=False)
