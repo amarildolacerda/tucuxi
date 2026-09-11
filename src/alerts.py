@@ -145,9 +145,9 @@ def alarm_mode_telegram_handler(payload: Dict):
         return
 
     mode_map = {
-        "armed_home": "🏠 Modo Arming Home ativado",
-        "armed_away": "🚶 Modo Arming Away ativado",
-        "disarmed": "🔓 Modo Desarmado ativado",
+        "armed_home": "🔒 Alarme armado",
+        "armed_away": "🔒 Alarme Viagem armado",
+        "disarmed": "🔓 Alarme desarmado",
     }
 
     text = mode_map.get(mode_value, f"Modo de alarme alterado: {mode_value}")
