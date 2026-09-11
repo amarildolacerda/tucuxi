@@ -19,11 +19,10 @@ def _storage(tmp_path):
 
 # ── Storage tests ──
 
-def test_get_sensitivity_returns_default(tmp_path):
+def test_get_sensitivity_unconfigured_returns_default(tmp_path):
     storage = _storage(tmp_path)
     result = storage.get_camera_sensitivity(1)
-    assert result["level"] == "medium"
-    assert result["custom_params"] is None
+    assert result["level"] == "default"
     assert result["configured"] is False
 
 
@@ -33,20 +32,35 @@ def test_set_and_get_sensitivity(tmp_path):
     camera = storage.list_cameras()[0]
     storage.set_camera_sensitivity(camera["id"], "high")
     result = storage.get_camera_sensitivity(camera["id"])
-    assert result["level"] == "high"
-    assert result["custom_params"] is None
-    assert result["configured"] is True
+    assert result == {"level": "high", "configured": True}
 
 
-def test_set_custom_params(tmp_path):
+def test_set_level_default_clears_record(tmp_path):
     storage = _storage(tmp_path)
     storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
     camera = storage.list_cameras()[0]
-    custom = {"motion_min_area": 4000, "motion_persist_frames": 3, "detector_confidence": 0.35, "detector_iou": 0.42, "track_iou_threshold": 0.28}
-    storage.set_camera_sensitivity(camera["id"], "custom", custom)
+    storage.set_camera_sensitivity(camera["id"], "high")
+    assert storage.get_camera_sensitivity(camera["id"])["configured"] is True
+    storage.set_camera_sensitivity(camera["id"], "default")
     result = storage.get_camera_sensitivity(camera["id"])
-    assert result["level"] == "custom"
-    assert result["custom_params"] == custom
+    assert result["configured"] is False
+    assert result["level"] == "default"
+
+
+def test_get_sensitivity_legacy_custom_treated_as_default(tmp_path):
+    storage = _storage(tmp_path)
+    storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
+    camera = storage.list_cameras()[0]
+    with storage.lock:
+        cur = storage.connection.cursor()
+        cur.execute(
+            "INSERT INTO camera_sensitivity (camera_id, level, custom_params, updated_at) VALUES (?, 'custom', NULL, ?)",
+            (camera["id"], "2026-09-11T00:00:00+00:00"),
+        )
+        storage.connection.commit()
+    result = storage.get_camera_sensitivity(camera["id"])
+    assert result["level"] == "default"
+    assert result["configured"] is False
 
 
 # ── Sensitivity module tests ──
@@ -86,17 +100,6 @@ def test_get_effective_params_returns_preset(tmp_path):
     mgr = SensitivityManager(storage)
     params = mgr.get_effective_params(camera["id"])
     assert params == SENSITIVITY_PRESETS[SensitivityLevel.MEDIUM]
-
-
-def test_get_effective_params_returns_custom(tmp_path):
-    storage = _storage(tmp_path)
-    storage.seed_cameras([{"name": "Test", "source": "rtsp://test", "zone": "test"}])
-    camera = storage.list_cameras()[0]
-    custom = {"motion_min_area": 4000, "motion_persist_frames": 3, "detector_confidence": 0.35, "detector_iou": 0.42, "track_iou_threshold": 0.28}
-    storage.set_camera_sensitivity(camera["id"], "custom", custom)
-    mgr = SensitivityManager(storage)
-    params = mgr.get_effective_params(camera["id"])
-    assert params == custom
 
 
 def test_set_level_persists(tmp_path):

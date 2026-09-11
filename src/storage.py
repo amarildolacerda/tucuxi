@@ -1336,38 +1336,42 @@ class EventStorage:
 
     # ── Sensitivity ──
 
-    def get_camera_sensitivity(self, camera_id):
-        """Retorna sensitivity config para uma câmera. Default: medium.
+    VALID_SENSITIVITY_LEVELS = {"low", "medium", "high", "default"}
 
-        ``configured`` é True quando existe registro para a câmera; quando False,
-        o nível "medium" é apenas o fallback e os parâmetros efetivos devem vir
-        do ambiente (env vars / defaults), conforme SPEC §8.1/§8.2.
+    def get_camera_sensitivity(self, camera_id):
+        """Retorna sensitivity config para uma câmera.
+
+        ``configured`` é True quando existe registro válido (low/medium/high);
+        quando False (sem registro, ou nível legado tipo 'custom'), o nível é
+        ``default`` e os parâmetros efetivos vêm de config.py/.env.
         """
         with self.lock:
             cursor = self.connection.cursor()
             cursor.execute("SELECT level, custom_params FROM camera_sensitivity WHERE camera_id = ?", (camera_id,))
             row = cursor.fetchone()
-        if row is None:
-            return {"level": "medium", "custom_params": None, "configured": False}
-        custom = None
-        if row["custom_params"]:
-            try:
-                custom = json.loads(row["custom_params"])
-            except (json.JSONDecodeError, TypeError):
-                custom = None
-        return {"level": row["level"], "custom_params": custom, "configured": True}
+        if row is None or row["level"] not in self.VALID_SENSITIVITY_LEVELS:
+            return {"level": "default", "configured": False}
+        return {"level": row["level"], "configured": True}
 
-    def set_camera_sensitivity(self, camera_id, level, custom_params=None):
-        """Define sensitivity level para uma câmera. Upsert."""
+    def set_camera_sensitivity(self, camera_id, level):
+        """Define sensitivity level para uma câmera.
+
+        ``level == "default"`` remove o registro (a câmera passa a usar os
+        valores de config.py/.env). Outros níveis fazem upsert.
+        """
         from datetime import datetime, timezone
+        if level == "default":
+            with self.lock:
+                self.connection.execute("DELETE FROM camera_sensitivity WHERE camera_id = ?", (camera_id,))
+                self.connection.commit()
+            return
         now = datetime.now(timezone.utc).isoformat()
-        custom_json = json.dumps(custom_params) if custom_params is not None else None
         with self.lock:
             cursor = self.connection.cursor()
             cursor.execute(
-                "INSERT INTO camera_sensitivity (camera_id, level, custom_params, updated_at) VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(camera_id) DO UPDATE SET level = excluded.level, custom_params = excluded.custom_params, updated_at = excluded.updated_at",
-                (camera_id, level, custom_json, now),
+                "INSERT INTO camera_sensitivity (camera_id, level, custom_params, updated_at) VALUES (?, ?, NULL, ?) "
+                "ON CONFLICT(camera_id) DO UPDATE SET level = excluded.level, custom_params = NULL, updated_at = excluded.updated_at",
+                (camera_id, level, now),
             )
             self.connection.commit()
 
