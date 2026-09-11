@@ -266,6 +266,61 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
             "privacy_mode": cfg.PRIVACY_MODE,
         })
 
+    @app.route("/api/sensitivity/presets")
+    def api_sensitivity_presets():
+        """Return the 3 preset values for the UI."""
+        from .sensitivity import SENSITIVITY_PRESETS, SensitivityLevel
+        return jsonify({
+            level.value: params
+            for level, params in SENSITIVITY_PRESETS.items()
+        })
+
+    @app.route("/api/cameras/<int:camera_id>/sensitivity", methods=["GET"])
+    @require_permission("view_cameras")
+    def api_camera_sensitivity_get(camera_id):
+        """Get sensitivity config for a camera."""
+        from .sensitivity import SensitivityManager, SENSITIVITY_PRESETS, SensitivityLevel
+        mgr = SensitivityManager(storage)
+        params = mgr.get_effective_params(camera_id)
+        config = storage.get_camera_sensitivity(camera_id)
+        return jsonify({
+            "camera_id": camera_id,
+            "level": config["level"],
+            "effective_params": params,
+            "custom_params": config["custom_params"],
+        })
+
+    @app.route("/api/cameras/<int:camera_id>/sensitivity", methods=["PUT"])
+    @require_permission("edit_cameras")
+    def api_camera_sensitivity_set(camera_id):
+        """Set sensitivity level for a camera."""
+        from .sensitivity import SensitivityManager, SensitivityLevel, validate_custom_params
+        data = request.get_json(silent=True) or {}
+        level = data.get("level")
+        if level not in [l.value for l in SensitivityLevel]:
+            return jsonify({"error": "Nível inválido. Use: low, medium, high, custom"}), 400
+        if level == "custom":
+            custom_params = data.get("custom_params")
+            if custom_params is None:
+                return jsonify({"error": "custom_params obrigatório para nível custom"}), 400
+            error = validate_custom_params(custom_params)
+            if error:
+                return jsonify({"error": error}), 400
+        else:
+            custom_params = None
+        mgr = SensitivityManager(storage)
+        error = mgr.set_level(camera_id, level, custom_params)
+        if error:
+            return jsonify({"error": error}), 400
+        config = storage.get_camera_sensitivity(camera_id)
+        params = mgr.get_effective_params(camera_id)
+        return jsonify({
+            "camera_id": camera_id,
+            "level": config["level"],
+            "effective_params": params,
+            "custom_params": config["custom_params"],
+        })
+
     @app.route("/api/events/prune", methods=["POST"])
     @require_permission("prune_events")
     def api_events_prune():
