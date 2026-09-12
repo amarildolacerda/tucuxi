@@ -709,18 +709,17 @@ function resetCameraList() {
 
 function initCameraSensitivity(currentLevel = 'default') {
   selectedSensitivityLevel = currentLevel;
-  document.querySelectorAll('#camera-sensitivity .sensitivity-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.sensitivityLevel === currentLevel);
-  });
+  const select = document.getElementById('camera-sensitivity');
+  if (select) select.value = currentLevel;
   const desc = document.getElementById('camera-sensitivity-desc');
   if (desc) desc.textContent = SENSITIVITY_DESCS[currentLevel] || '';
 }
 
 function bindSensitivityButtons() {
-  document.querySelectorAll('#camera-sensitivity .sensitivity-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      initCameraSensitivity(btn.dataset.sensitivityLevel);
-    });
+  const select = document.getElementById('camera-sensitivity');
+  if (!select) return;
+  select.addEventListener('change', () => {
+    initCameraSensitivity(select.value);
   });
 }
 

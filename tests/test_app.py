@@ -69,8 +69,9 @@ def test_settings_js_has_default_profile(client):
 def test_camera_form_section_renders_sensitivity(client):
     response = client.get("/section/cameras")
     assert response.status_code == 200
-    assert b"camera-sensitivity" in response.data
-    assert b'data-sensitivity-level="default"' in response.data
+    assert b'<select id="camera-sensitivity"' in response.data
+    assert b'value="default"' in response.data
+    assert b'value="high"' in response.data
 
 
 def test_workers_route(client):

@@ -47,13 +47,13 @@
                 </select>
             </div>
             <div class="form-row">
-                <span class="form-label" id="camera-sensitivity-label">Sensibilidade</span>
-                <div id="camera-sensitivity" class="sensitivity-selector">
-                    <button type="button" class="button-mini sensitivity-btn active" data-sensitivity-level="default">Padrão</button>
-                    <button type="button" class="button-mini sensitivity-btn" data-sensitivity-level="low">Baixa</button>
-                    <button type="button" class="button-mini sensitivity-btn" data-sensitivity-level="medium">Média</button>
-                    <button type="button" class="button-mini sensitivity-btn" data-sensitivity-level="high">Alta</button>
-                </div>
+                <label for="camera-sensitivity">Sensibilidade</label>
+                <select id="camera-sensitivity">
+                    <option value="default">Padrão</option>
+                    <option value="low">Baixa</option>
+                    <option value="medium">Média</option>
+                    <option value="high">Alta</option>
+                </select>
                 <p id="camera-sensitivity-desc" class="sensitivity-desc">Usa a configuração geral do sistema (.env).</p>
             </div>
             <div class="form-row">
