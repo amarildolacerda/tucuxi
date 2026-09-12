@@ -49,9 +49,12 @@ class AlertService:
             # canal só dispara se estiver na lista da regra QUANDO a regra
             # fornecer a lista. None = sem restrição de regra.
             if routing_channels is not None and channel is not None and channel not in routing_channels:
+                logger.debug("SKIP handler %s: channel=%s not in routing_channels=%s", handler.__name__, channel, routing_channels)
                 continue
             if channel is not None and routing is not None and not is_enabled(routing, channel, event_type):
+                logger.debug("SKIP handler %s: channel=%s disabled for event_type=%s in routing", handler.__name__, channel, event_type)
                 continue
+            logger.info("CALL handler %s for event_type=%s channel=%s", handler.__name__, event_type, channel)
             try:
                 result = handler(payload)
                 if result is not None and event_id is None:
@@ -177,6 +180,9 @@ def mqtt_handler(payload: Dict):
     if not broker:
         logger.debug("MQTT handler skipped: MQTT_BROKER_URL not configured")
         return
+
+    event_type = payload.get("event_type", "unknown")
+    logger.info("mqtt_handler ENTER: event_type=%s camera_id=%s", event_type, payload.get("camera_id"))
 
     # If an explicit MQTT_TOPIC env var is configured, prefer simple publish.single (tests expect this)
     try:
