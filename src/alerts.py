@@ -178,8 +178,6 @@ def mqtt_handler(payload: Dict):
         logger.debug("MQTT handler skipped: MQTT_BROKER_URL not configured")
         return
 
-    logger.info("mqtt_handler called: event_type=%s camera_id=%s", payload.get("event_type"), payload.get("camera_id"))
-
     # If an explicit MQTT_TOPIC env var is configured, prefer simple publish.single (tests expect this)
     try:
         if os.getenv("MQTT_TOPIC"):
@@ -191,10 +189,8 @@ def mqtt_handler(payload: Dict):
             publish.single(f"secur/{safe_id}/alert", payload=json.dumps(payload), hostname=broker, port=port, retain=True, auth=auth)
             if payload.get("event_type") in ("motion_detected", "object_detected", "snapshot_info"):
                 publish.single(f"secur/{safe_id}/state", payload="ON", hostname=broker, port=port, retain=True, auth=auth)
-                logger.info("MQTT motion state published: topic=secur/%s/state payload=ON", safe_id)
             elif payload.get("event_type") == "no_motion":
                 publish.single(f"secur/{safe_id}/state", payload="OFF", hostname=broker, port=port, retain=True, auth=auth)
-                logger.info("MQTT motion state published: topic=secur/%s/state payload=OFF", safe_id)
 
             # Main topic publish last so tests capturing the last call see the configured topic
             publish.single(
