@@ -178,6 +178,8 @@ def mqtt_handler(payload: Dict):
         logger.debug("MQTT handler skipped: MQTT_BROKER_URL not configured")
         return
 
+    logger.info("mqtt_handler called: event_type=%s camera_id=%s", payload.get("event_type"), payload.get("camera_id"))
+
     # If an explicit MQTT_TOPIC env var is configured, prefer simple publish.single (tests expect this)
     try:
         if os.getenv("MQTT_TOPIC"):
@@ -187,9 +189,11 @@ def mqtt_handler(payload: Dict):
             publish.single(f"secur/{safe_id}/alert_state", payload=json.dumps(payload), hostname=broker, port=port, retain=True)
             publish.single(f"secur/{safe_id}/alert", payload=json.dumps(payload), hostname=broker, port=port, retain=True)
             if payload.get("event_type") in ("motion_detected", "object_detected", "snapshot_info"):
-                publish.single(f"secur/{safe_id}/state", payload="motion", hostname=broker, port=port, retain=True)
+                publish.single(f"secur/{safe_id}/state", payload="ON", hostname=broker, port=port, retain=True)
+                logger.info("MQTT motion state published: topic=secur/%s/state payload=ON", safe_id)
             elif payload.get("event_type") == "no_motion":
-                publish.single(f"secur/{safe_id}/state", payload="idle", hostname=broker, port=port, retain=True)
+                publish.single(f"secur/{safe_id}/state", payload="OFF", hostname=broker, port=port, retain=True)
+                logger.info("MQTT motion state published: topic=secur/%s/state payload=OFF", safe_id)
 
             # Main topic publish last so tests capturing the last call see the configured topic
             publish.single(
@@ -228,9 +232,9 @@ def mqtt_handler(payload: Dict):
                 client.publish(f"secur/{safe_id}/alert_state", json.dumps(payload), qos=0, retain=False)
                 client.publish(f"secur/{safe_id}/alert", json.dumps(payload), qos=0, retain=False)
                 if payload.get("event_type") in ("motion_detected", "object_detected", "snapshot_info"):
-                    client.publish(f"secur/{safe_id}/state", "motion", qos=0, retain=True)
+                    client.publish(f"secur/{safe_id}/state", "ON", qos=0, retain=True)
                 elif payload.get("event_type") == "no_motion":
-                    client.publish(f"secur/{safe_id}/state", "idle", qos=0, retain=True)
+                    client.publish(f"secur/{safe_id}/state", "OFF", qos=0, retain=True)
                 logger.info("MQTT alert published to topic=%s camera_id=%s", topic, payload.get("camera_id"))
         try:
             publish_enriched_event(to_enriched_event(payload))
@@ -453,12 +457,12 @@ def mqtt_register_device(cameras):
                 "suggested_area": zone,
             }
 
-            # Motion binary_sensor
+            # Motion binary_sensor (payloads padrão do HA: ON/OFF)
             motion_config = {
                 "name": f"{cam_name} Motion",
                 "state_topic": f"secur/{safe_id}/state",
-                "payload_on": "motion",
-                "payload_off": "idle",
+                "payload_on": "ON",
+                "payload_off": "OFF",
                 "device_class": "motion",
                 "unique_id": f"{safe_id}_motion",
                 "device": device,
@@ -504,7 +508,7 @@ def mqtt_register_device(cameras):
             client.publish(f"homeassistant/binary_sensor/{safe_id}_alert/config", "", qos=1, retain=True)
 
             # Publish initial states so HA doesn't show "unknown"
-            client.publish(f"secur/{safe_id}/state", "idle", qos=1, retain=True)
+            client.publish(f"secur/{safe_id}/state", "OFF", qos=1, retain=True)
             client.publish(f"secur/{safe_id}/alert_state",
                            json.dumps({"event_type": "none", "camera_id": cam_id}),
                            qos=1, retain=True)

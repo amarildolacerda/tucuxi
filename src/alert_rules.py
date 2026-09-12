@@ -53,6 +53,7 @@ class AlertRuleEngine:
         action = evaluate_rules(event_type, event.zone_classification, event.no_motion)
         channels = action.get("alert", ["telegram"])
         disposition = action.get("disposition", "alert")
+        logger.info("Alert routing: event_type=%s channels=%s routing=%s", event_type, channels, getattr(self.alerts, 'routing', None))
         self.alerts.send(
             event.camera_id, event.zone, event_type, details, event.zone_classification,
             identity=identity_name, known=known, category=category,
