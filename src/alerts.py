@@ -186,13 +186,14 @@ def mqtt_handler(payload: Dict):
             # Per-camera state for HA auto-discovery (publish first)
             cam_id = str(payload.get("camera_id", "0"))
             safe_id = f"secur_cam{cam_id}"
-            publish.single(f"secur/{safe_id}/alert_state", payload=json.dumps(payload), hostname=broker, port=port, retain=True)
-            publish.single(f"secur/{safe_id}/alert", payload=json.dumps(payload), hostname=broker, port=port, retain=True)
+            auth = {"username": username, "password": password} if username and password else None
+            publish.single(f"secur/{safe_id}/alert_state", payload=json.dumps(payload), hostname=broker, port=port, retain=True, auth=auth)
+            publish.single(f"secur/{safe_id}/alert", payload=json.dumps(payload), hostname=broker, port=port, retain=True, auth=auth)
             if payload.get("event_type") in ("motion_detected", "object_detected", "snapshot_info"):
-                publish.single(f"secur/{safe_id}/state", payload="ON", hostname=broker, port=port, retain=True)
+                publish.single(f"secur/{safe_id}/state", payload="ON", hostname=broker, port=port, retain=True, auth=auth)
                 logger.info("MQTT motion state published: topic=secur/%s/state payload=ON", safe_id)
             elif payload.get("event_type") == "no_motion":
-                publish.single(f"secur/{safe_id}/state", payload="OFF", hostname=broker, port=port, retain=True)
+                publish.single(f"secur/{safe_id}/state", payload="OFF", hostname=broker, port=port, retain=True, auth=auth)
                 logger.info("MQTT motion state published: topic=secur/%s/state payload=OFF", safe_id)
 
             # Main topic publish last so tests capturing the last call see the configured topic
@@ -201,7 +202,7 @@ def mqtt_handler(payload: Dict):
                 payload=json.dumps(payload),
                 hostname=broker,
                 port=port,
-                auth={"username": username, "password": password} if username and password else None,
+                auth=auth,
                 qos=0,
                 retain=False,
             )
