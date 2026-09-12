@@ -521,7 +521,7 @@ def mqtt_register_device(cameras):
             pass
 
 
-def mqtt_register_predictor_entities():
+def mqtt_register_predictor_entities(initial_alarm_mode: str = "armed_home"):
     """Publish MQTT auto-discovery for predictor entities (sensors, switches, alarm mode)."""
     broker = os.getenv("MQTT_BROKER_URL", "192.168.1.12")
     port = int(os.getenv("MQTT_BROKER_PORT", "1883"))
@@ -598,8 +598,10 @@ def mqtt_register_predictor_entities():
             retain=True,
         )
         # Publish initial state so HA doesn't show "unknown"
-        # Use FAIL_SECURE_MODE to match PredictorLoop initial state (armed_home)
-        client.publish("tucuxi/ha/alarm_mode", json.dumps({"alarm_mode": "armed_home"}), qos=1, retain=True)
+        # Uses the restored mode (first boot: fail-secure armed_home).
+        if initial_alarm_mode not in ("disarmed", "armed_home", "armed_away"):
+            initial_alarm_mode = "armed_home"
+        client.publish("tucuxi/ha/alarm_mode", json.dumps({"alarm_mode": initial_alarm_mode}), qos=1, retain=True)
 
         # Switches
         switches = [

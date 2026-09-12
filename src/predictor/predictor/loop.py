@@ -15,7 +15,8 @@ class PredictorLoop:
     """Embalagem A: in-process, fed by LocalEventQueue + periodic tick."""
 
     def __init__(self, broker: str, port: int, auth: dict | None,
-                 entity_map: dict | None = None, publish: bool = True):
+                 entity_map: dict | None = None, publish: bool = True,
+                 initial_mode: str | None = None, on_mode_change=None):
         raw = os.getenv("PREDICTOR_ENTITY_MAP", "")
         self.entity_map = entity_map if entity_map is not None else load_entity_map(raw)
         self.models: dict[str, EWMAModel] = {s: EWMAModel() for s in self.entity_map}
@@ -25,10 +26,12 @@ class PredictorLoop:
         self.port = port
         self.auth = auth
         self.publish = publish
-        self.alarm_mode = ha_client.FAIL_SECURE_MODE
+        # Restore last saved mode; first boot (None/invalid) keeps fail-secure default.
+        self.alarm_mode = initial_mode if initial_mode in ha_client.VALID_MODES else ha_client.FAIL_SECURE_MODE
         self.alarm_ts = ""
-        self._viagem_on = False
-        self._alarme_on = True  # starts armed
+        self._on_mode_change = on_mode_change
+        self._viagem_on = (self.alarm_mode == "armed_away")
+        self._alarme_on = (self.alarm_mode == "armed_home")
         # Publish initial switch state so HA switch shows correct state on startup
         self._publish_switch_states(mode=self.alarm_mode)
 
@@ -36,6 +39,11 @@ class PredictorLoop:
         if mode in ha_client.VALID_MODES:
             self.alarm_mode = mode
             self.alarm_ts = timestamp_iso
+            if self._on_mode_change is not None:
+                try:
+                    self._on_mode_change(mode)
+                except Exception:
+                    pass
 
     def _publish_switch_states(self, mode: str) -> None:
         """Publish switch states so HA reflects the current alarm mode."""

@@ -439,7 +439,13 @@ class EventStorage:
     def list_cameras(self):
         with self.lock:
             cursor = self.connection.cursor()
-            cursor.execute("SELECT id, name, source, zone, alert_classes, exclusion_zones, mask_polygons FROM cameras ORDER BY id ASC")
+            cursor.execute("""
+                SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
+                       COALESCE(s.level, 'default') AS level
+                FROM cameras c
+                LEFT JOIN camera_sensitivity s ON s.camera_id = c.id
+                ORDER BY c.id ASC
+            """)
             rows = [dict(row) for row in cursor.fetchall()]
         for row in rows:
             row["alert_classes"] = json.loads(row["alert_classes"]) if row.get("alert_classes") else None

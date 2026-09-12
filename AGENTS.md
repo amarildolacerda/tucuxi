@@ -45,6 +45,19 @@ Fornecer orientações claras sobre como dividir tarefas entre agentes de projet
 - Use o formato de tag `v0.0.0` para a primeira versão e incremente conforme necessário.
 - Apenas a branch `main` deve conter código já liberado para produção.
 
+### Verificação obrigatória de branch (anti-push-direto-no-main)
+
+Incidente recorrente: código subiu em `main` sem passar por `dev`. Antes de
+qualquer `commit`, `push`, `merge` ou criação de PR, o agente DEVE:
+
+1. Rodar `git branch --show-current` e confirmar que NÃO está em `main`.
+2. Se estiver em `main`, parar e trocar para `dev` (ou branch de feature) antes de qualquer alteração.
+3. Só fazer push para `dev` ou branch de feature; `main` só recebe merge via release + tag.
+4. Nunca usar `--force`, `-f` ou bypass de hook sem pedido explícito do usuário.
+
+Um hook local `pre-push` que bloqueia push direto a `main` complementa esta
+regra (ver `.git/hooks/pre-push`), mas não substitui a verificação acima.
+
 ## Como aplicar no projeto
 
 - Use o agente de especificação para planejar a próxima etapa antes de começar a codificar.

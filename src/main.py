@@ -767,8 +767,11 @@ def main():
     if PREDICTOR_ENABLED:
         from .predictor.predictor.loop import PredictorLoop
         from .config import MQTT_BROKER_URL, MQTT_BROKER_PORT, MQTT_USERNAME, MQTT_PASSWORD
+        # Restore last saved alarm mode; first boot (None) keeps fail-secure default.
         _predictor = PredictorLoop(MQTT_BROKER_URL, MQTT_BROKER_PORT,
-                                   {"username": MQTT_USERNAME, "password": MQTT_PASSWORD})
+                                   {"username": MQTT_USERNAME, "password": MQTT_PASSWORD},
+                                   initial_mode=storage.get_setting("alarm_mode"),
+                                   on_mode_change=lambda mode: storage.set_setting("alarm_mode", mode))
         event_bus.subscribe(_predictor.on_event)
 
         # Subscribe to alarm_mode from HA (alarm_control_panel publishes here)
@@ -889,7 +892,7 @@ def main():
         logger.info("Predictor MQTT loop started, waiting for connection...")
 
         # Auto-discovery: register predictor entities in HA via MQTT
-        mqtt_register_predictor_entities()
+        mqtt_register_predictor_entities(initial_alarm_mode=_predictor.alarm_mode)
 
         def _predictor_ticker():
             import threading

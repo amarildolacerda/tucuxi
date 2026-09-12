@@ -652,6 +652,7 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         return render_template("docs.html", api_docs=api_docs)
 
     @app.route("/cameras")
+    @app.route("/api/cameras")
     def cameras():
         user = getattr(g, "current_user", None)
         cams = storage.list_cameras()
