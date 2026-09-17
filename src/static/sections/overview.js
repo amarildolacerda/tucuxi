@@ -24,6 +24,8 @@ function createSummaryCard(title, value, subtitle = "") {
   `;
 }
 
+const SENSITIVITY_LABELS = { default: 'Padrão', low: 'Baixa', medium: 'Média', high: 'Alta' };
+
 function createCameraCard(camera, offline = false, lastEventTs = null, n0Count = 0) {
   const faultOffline = cameraFaultState[camera.id] && cameraFaultState[camera.id].status === 'offline';
   offline = offline || faultOffline;
@@ -38,6 +40,7 @@ function createCameraCard(camera, offline = false, lastEventTs = null, n0Count =
   const lastEventLabel = lastEventTs
     ? new Date(lastEventTs).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     : 'Sem eventos';
+  const sensitivityLabel = SENSITIVITY_LABELS[camera.level] || 'Padrão';
 
   return `
     <div class="card camera-card${offline ? ' camera-card-offline' : ''}" data-camera-id="${camera.id}">
@@ -48,6 +51,7 @@ function createCameraCard(camera, offline = false, lastEventTs = null, n0Count =
       <p class="camera-zone">Zona: ${zoneLabel} ${offlineBadge}</p>
       <p class="camera-source">Fonte: ${maskRtspUrl(camera.source)}</p>
       <p class="camera-card-time">Último evento: ${lastEventLabel}</p>
+      <p class="camera-card-time">Sensibilidade: ${sensitivityLabel}</p>
       <div
         class="camera-preview-wrapper"
         data-camera-id="${camera.id}"
@@ -68,8 +72,16 @@ function createCameraCard(camera, offline = false, lastEventTs = null, n0Count =
         </div>
       </div>
       <div class="camera-card-actions">
-        <button class="button-secondary button-mini" onclick="event.stopPropagation(); openLivePlayer(${camera.id}, '${camera.name}', '${camera.source}')">Ao vivo</button>
+        <button class="button-secondary button-mini" onclick="event.stopPropagation(); openLivePlayer(${camera.id}, '${camera.name}', '${camera.source}', ${camera.ptz_enabled ? 'true' : 'false'})">Ao vivo</button>
       </div>
+      ${camera.ptz_enabled ? `
+      <div class="camera-card-ptz" data-camera-id="${camera.id}">
+        <button class="button-mini ptz-btn" data-pan="-0.5" data-tilt="0" title="←">←</button>
+        <button class="button-mini ptz-btn" data-pan="0" data-tilt="0.5" title="↑">↑</button>
+        <button class="button-mini ptz-btn ptz-btn-stop" data-stop="1" title="Stop">⏹</button>
+        <button class="button-mini ptz-btn" data-pan="0" data-tilt="-0.5" title="↓">↓</button>
+        <button class="button-mini ptz-btn" data-pan="0.5" data-tilt="0" title="→">→</button>
+      </div>` : ''}
     </div>
   `;
 }
@@ -376,12 +388,16 @@ function updateCameraCard(el, camera, offline, lastEventTs, n0Count) {
     }
   }
 
-  const timeEl = el.querySelector('.camera-card-time');
-  if (timeEl) {
+  const timeEls = el.querySelectorAll('.camera-card-time');
+  if (timeEls[0]) {
     const label = lastEventTs
       ? new Date(lastEventTs).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
       : 'Sem eventos';
-    timeEl.textContent = `Último evento: ${label}`;
+    timeEls[0].textContent = `Último evento: ${label}`;
+  }
+  if (timeEls[1]) {
+    const sensLabel = SENSITIVITY_LABELS[camera.level] || 'Padrão';
+    timeEls[1].textContent = `Sensibilidade: ${sensLabel}`;
   }
 }
 
@@ -488,9 +504,89 @@ async function renderOverview() {
   updateVisibleSnapshots(sortedCameras);
 }
 
+let _cardPTZTimers = {};
+function setupCardPTZControls() {
+  const container = document.getElementById('camera-tiles');
+  if (!container) return;
+  container.addEventListener('mousedown', (e) => {
+    const btn = e.target.closest('.camera-card-ptz .ptz-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    const card = btn.closest('.camera-card-ptz');
+    const cameraId = parseInt(card.dataset.cameraId, 10);
+    if (btn.dataset.stop) {
+      cardPTZStop(cameraId);
+    } else {
+      const pan = parseFloat(btn.dataset.pan || 0);
+      const tilt = parseFloat(btn.dataset.tilt || 0);
+      const zoom = parseFloat(btn.dataset.zoom || 0);
+      cardPTZMove(cameraId, pan, tilt, zoom);
+    }
+  });
+  container.addEventListener('mouseup', (e) => {
+    const btn = e.target.closest('.camera-card-ptz .ptz-btn');
+    if (!btn || btn.dataset.stop) return;
+    const card = btn.closest('.camera-card-ptz');
+    const cameraId = parseInt(card.dataset.cameraId, 10);
+    cardPTZStop(cameraId);
+  });
+  container.addEventListener('mouseleave', (e) => {
+    const btn = e.target.closest('.camera-card-ptz .ptz-btn');
+    if (!btn || btn.dataset.stop) return;
+    const card = btn.closest('.camera-card-ptz');
+    const cameraId = parseInt(card.dataset.cameraId, 10);
+    cardPTZStop(cameraId);
+  }, true);
+}
+
+async function cardPTZMove(cameraId, pan, tilt, zoom) {
+  try {
+    await fetch(`/api/cameras/${cameraId}/ptz/move`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({pan, tilt, zoom})
+    });
+  } catch (e) { /* ignore */ }
+}
+
+async function cardPTZStop(cameraId) {
+  try {
+    await fetch(`/api/cameras/${cameraId}/ptz/stop`, {method: "POST"});
+  } catch (e) { /* ignore */ }
+  pollCardPTZIdle(cameraId);
+}
+
+async function pollCardPTZIdle(cameraId, intervalMs = 200, maxWaitMs = 5000) {
+  clearTimeout(_cardPTZTimers[cameraId]);
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    try {
+      const resp = await fetch(`/api/cameras/${cameraId}/ptz/status`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.idle) {
+          await new Promise(r => setTimeout(r, 50));
+          refreshCardSnapshot(cameraId);
+          return;
+        }
+      }
+    } catch (e) { /* ignore */ }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  refreshCardSnapshot(cameraId);
+}
+
+function refreshCardSnapshot(cameraId) {
+  const img = document.getElementById(`snapshot-${cameraId}`);
+  if (img) {
+    img.src = `/camera/${cameraId}/snapshot?ts=${Date.now()}`;
+  }
+}
+
 export function initSection() {
   setupOfflineToggle();
   setupHoverFreshSnapshots();
+  setupCardPTZControls();
   const addBtn = document.getElementById('empty-add-camera');
   if (addBtn) addBtn.addEventListener('click', () => loadSection('cameras'));
   renderOverview();

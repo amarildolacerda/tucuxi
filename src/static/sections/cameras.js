@@ -1121,6 +1121,27 @@ export function initSection() {
 
 let currentPTZCameraId = null;
 
+let ptzPreviewTimer = null;
+async function pollPTZIdleForPreview(cameraId, intervalMs = 200, maxWaitMs = 5000) {
+  clearTimeout(ptzPreviewTimer);
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    try {
+      const resp = await fetch(`/api/cameras/${cameraId}/ptz/status`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.idle) {
+          await new Promise(r => setTimeout(r, 50));
+          loadPreviewFrame(cameraId);
+          return;
+        }
+      }
+    } catch (e) { /* ignore poll errors */ }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  loadPreviewFrame(cameraId);
+}
+
 function initPTZControls(cameraId) {
   currentPTZCameraId = cameraId;
   const panel = document.getElementById("ptz-controls-panel");
@@ -1129,14 +1150,27 @@ function initPTZControls(cameraId) {
 
   // Direction buttons
   document.querySelectorAll(".ptz-btn").forEach(btn => {
-    btn.addEventListener("mousedown", () => {
-      const pan = parseFloat(btn.dataset.pan || 0);
-      const tilt = parseFloat(btn.dataset.tilt || 0);
-      const zoom = parseFloat(btn.dataset.zoom || 0);
-      ptzMove(cameraId, pan, tilt, zoom);
-    });
-    btn.addEventListener("mouseup", () => ptzStop(cameraId));
-    btn.addEventListener("mouseleave", () => ptzStop(cameraId));
+    if (btn.dataset.stop) {
+      btn.addEventListener("mousedown", () => {
+        ptzStop(cameraId);
+        pollPTZIdleForPreview(cameraId);
+      });
+    } else {
+      btn.addEventListener("mousedown", () => {
+        const pan = parseFloat(btn.dataset.pan || 0);
+        const tilt = parseFloat(btn.dataset.tilt || 0);
+        const zoom = parseFloat(btn.dataset.zoom || 0);
+        ptzMove(cameraId, pan, tilt, zoom);
+      });
+      btn.addEventListener("mouseup", () => {
+        ptzStop(cameraId);
+        pollPTZIdleForPreview(cameraId);
+      });
+      btn.addEventListener("mouseleave", () => {
+        ptzStop(cameraId);
+        pollPTZIdleForPreview(cameraId);
+      });
+    }
   });
 
   // Save preset button
@@ -1150,15 +1184,27 @@ function initPTZControls(cameraId) {
 }
 
 async function ptzMove(cameraId, pan, tilt, zoom) {
-  await fetch(`/api/cameras/${cameraId}/ptz/move`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({pan, tilt, zoom})
-  });
+  try {
+    const resp = await fetch(`/api/cameras/${cameraId}/ptz/move`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({pan, tilt, zoom})
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      console.warn("PTZ move failed:", err.error || resp.status);
+    }
+  } catch (e) {
+    console.warn("PTZ move error:", e.message);
+  }
 }
 
 async function ptzStop(cameraId) {
-  await fetch(`/api/cameras/${cameraId}/ptz/stop`, {method: "POST"});
+  try {
+    await fetch(`/api/cameras/${cameraId}/ptz/stop`, {method: "POST"});
+  } catch (e) {
+    console.warn("PTZ stop error:", e.message);
+  }
 }
 
 async function loadPTZPresets(cameraId) {
@@ -1167,11 +1213,17 @@ async function loadPTZPresets(cameraId) {
   const list = document.getElementById("ptz-preset-list");
   if (!list) return;
   list.innerHTML = presets.map(p =>
-    `<button class="button-mini ptz-preset-btn" data-preset-id="${p.id}">${escapeHtml(p.name)}</button>`
+    `<span class="ptz-preset-item"><button class="button-mini ptz-preset-btn" data-preset-id="${p.id}">${escapeHtml(p.name)}</button><button class="button-mini ptz-preset-delete" data-preset-id="${p.id}" title="Excluir preset">×</button></span>`
   ).join("");
   list.querySelectorAll(".ptz-preset-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       fetch(`/api/cameras/${cameraId}/ptz/presets/${btn.dataset.presetId}/goto`, {method: "POST"});
+    });
+  });
+  list.querySelectorAll(".ptz-preset-delete").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      await fetch(`/api/cameras/${cameraId}/ptz/presets/${btn.dataset.presetId}`, {method: "DELETE"});
+      loadPTZPresets(cameraId);
     });
   });
 }

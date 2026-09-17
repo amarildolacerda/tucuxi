@@ -76,6 +76,35 @@ class PTZClient:
         })
         return True
 
+    def set_preset(self, name: str) -> Optional[str]:
+        """Create/update an ONVIF preset at current position. Returns token."""
+        self._connect()
+        try:
+            result = self._ptz_service.SetPreset({
+                "ProfileToken": self._profile_token,
+                "PresetName": name,
+            })
+            token = getattr(result, "PresetToken", None)
+            if token:
+                logger.info(f"ONVIF preset '{name}' created, token={token}")
+            return token
+        except Exception as e:
+            logger.warning(f"SetPreset failed: {e}")
+            return None
+
+    def remove_preset(self, preset_token: str) -> bool:
+        """Remove an ONVIF preset."""
+        self._connect()
+        try:
+            self._ptz_service.RemovePreset({
+                "ProfileToken": self._profile_token,
+                "PresetToken": preset_token
+            })
+            return True
+        except Exception as e:
+            logger.warning(f"RemovePreset failed: {e}")
+            return False
+
     def get_capabilities(self) -> dict:
         """Check PTZ capabilities."""
         self._connect()
@@ -85,7 +114,28 @@ class PTZClient:
                 "continuous_move": getattr(caps, "ContinuousMove", None),
                 "relative_move": getattr(caps, "RelativeMove", None),
                 "absolute_move": getattr(caps, "AbsoluteMove", None),
+                "move_status": getattr(caps, "MoveStatus", None),
             }
         except Exception as e:
             logger.warning(f"GetServiceCapabilities failed: {e}")
             return {}
+
+    def get_status(self) -> dict:
+        """Get current PTZ status (position + move state)."""
+        self._connect()
+        try:
+            status = self._ptz_service.GetStatus({"ProfileToken": self._profile_token})
+            move_status = getattr(status, "MoveStatus", None)
+            pan_tilt_idle = True
+            zoom_idle = True
+            if move_status:
+                pan_tilt_idle = getattr(move_status, "PanTilt", "IDLE") == "IDLE"
+                zoom_idle = getattr(move_status, "Zoom", "IDLE") == "IDLE"
+            return {
+                "pan_tilt_idle": pan_tilt_idle,
+                "zoom_idle": zoom_idle,
+                "idle": pan_tilt_idle and zoom_idle,
+            }
+        except Exception as e:
+            logger.warning(f"GetStatus failed: {e}")
+            return {"pan_tilt_idle": True, "zoom_idle": True, "idle": True}

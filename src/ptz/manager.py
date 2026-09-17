@@ -47,6 +47,13 @@ class PTZManager:
             raise ValueError(f"PTZ not configured for camera {camera_id}")
         return client.stop()
 
+    def get_status(self, camera_id: int) -> dict:
+        """Get camera PTZ status (position + move state)."""
+        client = self._clients.get(camera_id)
+        if not client:
+            return {"idle": True, "error": "PTZ not configured"}
+        return client.get_status()
+
     def goto_preset(self, camera_id: int, preset_token: str) -> bool:
         """Move to preset position."""
         client = self._clients.get(camera_id)

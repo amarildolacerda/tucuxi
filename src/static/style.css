@@ -848,12 +848,16 @@ tbody tr:last-child td {
   width: min(800px, 100%);
   padding: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
 }
 
 .live-player-card .dialog-header {
   padding: 16px 20px;
   margin-bottom: 0;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .live-video-container {
@@ -861,11 +865,13 @@ tbody tr:last-child td {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 1;
+  min-height: 0;
 }
 
 .live-video {
   width: 100%;
-  max-height: 70vh;
+  max-height: 55vh;
   object-fit: contain;
   display: block;
 }
@@ -877,11 +883,13 @@ tbody tr:last-child td {
   align-items: center;
   justify-content: center;
   padding: 16px;
+  flex: 1;
+  min-height: 0;
 }
 
 .live-snapshot {
   width: 100%;
-  max-height: 70vh;
+  max-height: 55vh;
   object-fit: contain;
 }
 
@@ -889,6 +897,26 @@ tbody tr:last-child td {
   color: var(--muted);
   font-size: 0.75rem;
   margin-top: 8px;
+}
+
+.live-ptz-controls {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.live-ptz-controls .ptz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.live-ptz-controls .ptz-btn-active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
 }
 
 .dialog-header {
@@ -1469,6 +1497,19 @@ tr.event-info td {
   margin-top: 8px;
   display: flex;
   justify-content: flex-end;
+}
+
+.camera-card-ptz {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.camera-card-ptz .ptz-btn-active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
 }
 
 /* Notifications config */

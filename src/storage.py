@@ -239,6 +239,7 @@ class EventStorage:
                     camera_id INTEGER NOT NULL,
                     name TEXT NOT NULL,
                     position TEXT NOT NULL,
+                    onvif_token TEXT,
                     created_at TEXT DEFAULT (datetime('now')),
                     FOREIGN KEY (camera_id) REFERENCES cameras(id) ON DELETE CASCADE
                 )
@@ -619,12 +620,12 @@ class EventStorage:
             self.connection.commit()
             return cursor.rowcount > 0
 
-    def add_ptz_preset(self, camera_id, name, position):
+    def add_ptz_preset(self, camera_id, name, position, onvif_token=None):
         with self.lock:
             cursor = self.connection.cursor()
             cursor.execute(
-                "INSERT INTO ptz_presets (camera_id, name, position) VALUES (?, ?, ?)",
-                (camera_id, name, json.dumps(position)),
+                "INSERT INTO ptz_presets (camera_id, name, position, onvif_token) VALUES (?, ?, ?, ?)",
+                (camera_id, name, json.dumps(position), onvif_token),
             )
             self.connection.commit()
             return cursor.lastrowid

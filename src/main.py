@@ -182,7 +182,7 @@ class CameraWorker:
         cumprido, cena estável já representada ou falha de escrita).
         Em todo save bem-sucedido atualiza o representante de cena.
         """
-        if not force and not self._should_save_thumbnail(storage_frame, now):
+        if not force and event_id is None and not self._should_save_thumbnail(storage_frame, now):
             return None
         try:
             cam_dir = THUMBNAILS_DIR / f"cam{self.camera['id']}"
@@ -481,7 +481,7 @@ class CameraWorker:
                     )
                     if self._should_emit_event(identity_info, fall, loitering, direction, storage_frame, now):
                         thumb_path = self._capture_thumbnail(
-                            storage_frame, None, time.time(), thumb_keep, thumb_days,
+                            storage_frame, None, now, thumb_keep, thumb_days,
                             event_id=event.event_id,
                             force=bool(detections),
                         )
@@ -512,8 +512,8 @@ class CameraWorker:
                     # Força salvar o frame atual (cena quieta) -> grid mostra a
                     # cena real, não a imagem anterior (stale).
                     thumb_path = self._capture_thumbnail(
-                        storage_frame, "no_motion", time.time(),
-                        thumb_keep, thumb_days, event_id=None, force=True,
+                        storage_frame, "no_motion", ev.timestamp,
+                        thumb_keep, thumb_days, event_id=ev.event_id, force=True,
                     )
                     ev.thumbnail_path = thumb_path or self._latest_thumbnail_path()
                     self.event_bus.enqueue(ev)

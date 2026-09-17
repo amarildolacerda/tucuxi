@@ -175,6 +175,13 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
     from .ptz import PTZManager
     ptz_manager = PTZManager(storage)
     app.ptz_manager = ptz_manager
+    # Initialize PTZ clients for cameras that already have PTZ config
+    try:
+        for cam in storage.list_cameras():
+            if cam.get("ptz_enabled"):
+                ptz_manager.init_camera(cam["id"])
+    except Exception:
+        pass  # Don't crash startup if PTZ init fails
     # recognizer_factory hook: tests or callers may set app.recognizer_factory = lambda storage: recognizer
     def _make_recognizer() -> Optional[object]:
         # Prefer the shared recognizer used by the camera workers so cache
@@ -751,7 +758,6 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
     @app.route("/api/cameras/<int:camera_id>/ptz/move", methods=["POST"])
     @require_permission("manage_cameras")
     def ptz_move(camera_id):
-        from .ptz import PTZManager
         ptz_manager = getattr(app, "ptz_manager", None)
         if not ptz_manager:
             return jsonify({"error": "PTZ não configurado"}), 503
@@ -777,6 +783,18 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
 
+    @app.route("/api/cameras/<int:camera_id>/ptz/status", methods=["GET"])
+    @require_permission("manage_cameras")
+    def ptz_status(camera_id):
+        ptz_manager = getattr(app, "ptz_manager", None)
+        if not ptz_manager:
+            return jsonify({"idle": True, "error": "PTZ não configurado"})
+        try:
+            status = ptz_manager.get_status(camera_id)
+            return jsonify(status)
+        except Exception as e:
+            return jsonify({"idle": True, "error": str(e)})
+
     @app.route("/api/cameras/<int:camera_id>/ptz/presets", methods=["GET"])
     @require_permission("manage_cameras")
     def ptz_list_presets(camera_id):
@@ -791,8 +809,15 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         position = payload.get("position")
         if not name or not position:
             return jsonify({"error": "name e position são obrigatórios"}), 400
-        preset_id = storage.add_ptz_preset(camera_id, name, position)
-        return jsonify({"id": preset_id, "name": name, "position": position}), 201
+        # Try to create ONVIF preset on the camera
+        onvif_token = None
+        ptz_manager = getattr(app, "ptz_manager", None)
+        if ptz_manager:
+            client = ptz_manager.get_client(camera_id)
+            if client:
+                onvif_token = client.set_preset(name)
+        preset_id = storage.add_ptz_preset(camera_id, name, position, onvif_token=onvif_token)
+        return jsonify({"id": preset_id, "name": name, "position": position, "onvif_token": onvif_token}), 201
 
     @app.route("/api/cameras/<int:camera_id>/ptz/presets/<int:preset_id>", methods=["DELETE"])
     @require_permission("manage_cameras")
@@ -814,13 +839,20 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
             return jsonify({"error": "Preset não encontrado"}), 404
         try:
             client = ptz_manager.get_client(camera_id)
-            if client:
-                onvif_presets = client.get_presets()
-                match = next((p for p in onvif_presets if p["name"] == preset["name"]), None)
-                if match:
-                    client.goto_preset(match["token"])
-                    return jsonify({"status": "moving_to_preset"})
-            return jsonify({"error": "Preset ONVIF não encontrado"}), 404
+            if not client:
+                return jsonify({"error": "Cliente ONVIF não conectado"}), 503
+            # Use stored ONVIF token if available
+            onvif_token = preset.get("onvif_token")
+            if onvif_token:
+                client.goto_preset(onvif_token)
+                return jsonify({"status": "moving_to_preset"})
+            # Fallback: match by name against camera's ONVIF presets
+            onvif_presets = client.get_presets()
+            match = next((p for p in onvif_presets if p["name"] == preset["name"]), None)
+            if match:
+                client.goto_preset(match["token"])
+                return jsonify({"status": "moving_to_preset"})
+            return jsonify({"error": "Preset ONVIF não encontrado na câmera"}), 404
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
