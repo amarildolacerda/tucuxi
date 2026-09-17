@@ -192,6 +192,34 @@ class EventStorage:
                 )
                 """
             )
+            # ── PTZ tables ──
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS cameras_ptz (
+                    camera_id INTEGER PRIMARY KEY,
+                    onvif_host TEXT NOT NULL,
+                    onvif_port INTEGER DEFAULT 80,
+                    onvif_user TEXT,
+                    onvif_pass TEXT,
+                    ptz_enabled BOOLEAN DEFAULT 0,
+                    autotracking BOOLEAN DEFAULT 0,
+                    updated_at TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (camera_id) REFERENCES cameras(id) ON DELETE CASCADE
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ptz_presets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    camera_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    position TEXT NOT NULL,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (camera_id) REFERENCES cameras(id) ON DELETE CASCADE
+                )
+                """
+            )
             # ── Auth tables ──
             cursor.execute(
                 """
@@ -492,6 +520,75 @@ class EventStorage:
             return
         for camera in default_cameras:
             self.add_camera(camera["name"], camera["source"], camera.get("zone"))
+
+    # ── PTZ CRUD ──
+
+    def add_camera_ptz(self, camera_id, onvif_host, onvif_port=80, onvif_user=None, onvif_pass=None):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "INSERT OR REPLACE INTO cameras_ptz (camera_id, onvif_host, onvif_port, onvif_user, onvif_pass) VALUES (?, ?, ?, ?, ?)",
+                (camera_id, onvif_host, onvif_port, onvif_user, onvif_pass),
+            )
+            self.connection.commit()
+            return cursor.rowcount > 0
+
+    def get_camera_ptz(self, camera_id):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT * FROM cameras_ptz WHERE camera_id = ?", (camera_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def update_camera_ptz(self, camera_id, **kwargs):
+        with self.lock:
+            fields = []
+            values = []
+            for key, val in kwargs.items():
+                if key in ("onvif_host", "onvif_port", "onvif_user", "onvif_pass", "ptz_enabled", "autotracking"):
+                    fields.append(f"{key} = ?")
+                    values.append(val)
+            if not fields:
+                return False
+            fields.append("updated_at = datetime('now')")
+            values.append(camera_id)
+            cursor = self.connection.cursor()
+            cursor.execute(f"UPDATE cameras_ptz SET {', '.join(fields)} WHERE camera_id = ?", values)
+            self.connection.commit()
+            return cursor.rowcount > 0
+
+    def remove_camera_ptz(self, camera_id):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute("DELETE FROM cameras_ptz WHERE camera_id = ?", (camera_id,))
+            self.connection.commit()
+            return cursor.rowcount > 0
+
+    def add_ptz_preset(self, camera_id, name, position):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "INSERT INTO ptz_presets (camera_id, name, position) VALUES (?, ?, ?)",
+                (camera_id, name, json.dumps(position)),
+            )
+            self.connection.commit()
+            return cursor.lastrowid
+
+    def list_ptz_presets(self, camera_id):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT * FROM ptz_presets WHERE camera_id = ? ORDER BY id", (camera_id,))
+            rows = [dict(row) for row in cursor.fetchall()]
+        for row in rows:
+            row["position"] = json.loads(row["position"])
+        return rows
+
+    def remove_ptz_preset(self, preset_id):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute("DELETE FROM ptz_presets WHERE id = ?", (preset_id,))
+            self.connection.commit()
+            return cursor.rowcount > 0
 
     def add_zone(self, name: str, classification: str = 'pública', schedule=None, retention_policy=None, direction_line=None):
         with self.lock:
