@@ -733,6 +733,119 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         storage.remove_event_clips(camera_id)
         return jsonify({"status": "removido"}), 200
 
+    # ── PTZ Routes ──
+
+    @app.route("/api/cameras/<int:camera_id>/ptz/move", methods=["POST"])
+    @require_permission("manage_cameras")
+    def ptz_move(camera_id):
+        from .ptz import PTZManager
+        ptz_manager = getattr(app, "ptz_manager", None)
+        if not ptz_manager:
+            return jsonify({"error": "PTZ não configurado"}), 503
+        payload = request.get_json() or {}
+        pan = payload.get("pan", 0.0)
+        tilt = payload.get("tilt", 0.0)
+        zoom = payload.get("zoom", 0.0)
+        try:
+            ptz_manager.move(camera_id, pan, tilt, zoom)
+            return jsonify({"status": "moving"})
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+    @app.route("/api/cameras/<int:camera_id>/ptz/stop", methods=["POST"])
+    @require_permission("manage_cameras")
+    def ptz_stop(camera_id):
+        ptz_manager = getattr(app, "ptz_manager", None)
+        if not ptz_manager:
+            return jsonify({"error": "PTZ não configurado"}), 503
+        try:
+            ptz_manager.stop(camera_id)
+            return jsonify({"status": "stopped"})
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+    @app.route("/api/cameras/<int:camera_id>/ptz/presets", methods=["GET"])
+    @require_permission("manage_cameras")
+    def ptz_list_presets(camera_id):
+        presets = storage.list_ptz_presets(camera_id)
+        return jsonify(presets)
+
+    @app.route("/api/cameras/<int:camera_id>/ptz/presets", methods=["POST"])
+    @require_permission("manage_cameras")
+    def ptz_add_preset(camera_id):
+        payload = request.get_json() or {}
+        name = payload.get("name")
+        position = payload.get("position")
+        if not name or not position:
+            return jsonify({"error": "name e position são obrigatórios"}), 400
+        preset_id = storage.add_ptz_preset(camera_id, name, position)
+        return jsonify({"id": preset_id, "name": name, "position": position}), 201
+
+    @app.route("/api/cameras/<int:camera_id>/ptz/presets/<int:preset_id>", methods=["DELETE"])
+    @require_permission("manage_cameras")
+    def ptz_delete_preset(camera_id, preset_id):
+        removed = storage.remove_ptz_preset(preset_id)
+        if not removed:
+            return jsonify({"error": "Preset não encontrado"}), 404
+        return jsonify({"status": "deleted"})
+
+    @app.route("/api/cameras/<int:camera_id>/ptz/presets/<int:preset_id>/goto", methods=["POST"])
+    @require_permission("manage_cameras")
+    def ptz_goto_preset(camera_id, preset_id):
+        ptz_manager = getattr(app, "ptz_manager", None)
+        if not ptz_manager:
+            return jsonify({"error": "PTZ não configurado"}), 503
+        presets = storage.list_ptz_presets(camera_id)
+        preset = next((p for p in presets if p["id"] == preset_id), None)
+        if not preset:
+            return jsonify({"error": "Preset não encontrado"}), 404
+        try:
+            client = ptz_manager.get_client(camera_id)
+            if client:
+                onvif_presets = client.get_presets()
+                match = next((p for p in onvif_presets if p["name"] == preset["name"]), None)
+                if match:
+                    client.goto_preset(match["token"])
+                    return jsonify({"status": "moving_to_preset"})
+            return jsonify({"error": "Preset ONVIF não encontrado"}), 404
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/cameras/<int:camera_id>/ptz/config", methods=["PUT"])
+    @require_permission("manage_cameras")
+    def ptz_config(camera_id):
+        payload = request.get_json() or {}
+        onvif_host = payload.get("onvif_host")
+        onvif_port = payload.get("onvif_port", 80)
+        onvif_user = payload.get("onvif_user")
+        onvif_pass = payload.get("onvif_pass")
+        ptz_enabled = payload.get("ptz_enabled", False)
+
+        if ptz_enabled and not onvif_host:
+            return jsonify({"error": "onvif_host é obrigatório quando PTZ habilitado"}), 400
+
+        existing = storage.get_camera_ptz(camera_id)
+        if existing:
+            storage.update_camera_ptz(camera_id, onvif_host=onvif_host, onvif_port=onvif_port,
+                                      onvif_user=onvif_user, onvif_pass=onvif_pass,
+                                      ptz_enabled=ptz_enabled)
+        elif ptz_enabled:
+            storage.add_camera_ptz(camera_id, onvif_host, onvif_port, onvif_user, onvif_pass)
+
+        ptz_manager = getattr(app, "ptz_manager", None)
+        if ptz_manager and ptz_enabled:
+            ptz_manager.init_camera(camera_id)
+
+        return jsonify({"status": "updated"})
+
+    @app.route("/api/cameras/<int:camera_id>/ptz/autotracking", methods=["PUT"])
+    @require_permission("manage_cameras")
+    def ptz_autotracking(camera_id):
+        payload = request.get_json() or {}
+        enabled = payload.get("enabled", False)
+        storage.update_camera_ptz(camera_id, autotracking=enabled)
+        return jsonify({"autotracking": enabled})
+
     @app.route("/events")
     def events():
         user = getattr(g, "current_user", None)
