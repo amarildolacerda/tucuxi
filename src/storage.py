@@ -32,7 +32,31 @@ class EventStorage:
         self.connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
         self.lock = threading.Lock()
+        # Check DB integrity before creating tables
+        if not running_pytest and self.db_path.exists():
+            try:
+                cur = self.connection.execute("PRAGMA integrity_check")
+                result = cur.fetchone()
+                if result and result[0] != "ok":
+                    logger.warning("Database corruption detected, attempting recovery")
+                    self._recover_database()
+            except Exception as e:
+                logger.warning("Integrity check failed: %s — attempting recovery", e)
+                self._recover_database()
         self._create_tables()
+
+    def _recover_database(self):
+        """Backup corrupted DB and recreate fresh."""
+        backup_path = self.db_path.with_suffix(".db.corrupt")
+        try:
+            shutil.copy2(str(self.db_path), str(backup_path))
+            logger.info("Corrupted DB backed up to %s", backup_path)
+            self.db_path.unlink(missing_ok=True)
+            self.connection.close()
+            self.connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
+            self.connection.row_factory = sqlite3.Row
+        except Exception as e:
+            logger.error("Recovery failed: %s", e)
 
     def _create_tables(self):
         with self.lock:
@@ -467,16 +491,30 @@ class EventStorage:
     def list_cameras(self):
         with self.lock:
             cursor = self.connection.cursor()
-            cursor.execute("""
-                SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
-                       COALESCE(s.level, 'default') AS level,
-                       p.onvif_host, p.onvif_port, p.onvif_user, p.onvif_pass, p.ptz_enabled, p.autotracking
-                FROM cameras c
-                LEFT JOIN camera_sensitivity s ON s.camera_id = c.id
-                LEFT JOIN cameras_ptz p ON p.camera_id = c.id
-                ORDER BY c.id ASC
-            """)
-            rows = [dict(row) for row in cursor.fetchall()]
+            try:
+                cursor.execute("""
+                    SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
+                           COALESCE(s.level, 'default') AS level,
+                           p.onvif_host, p.onvif_port, p.onvif_user, p.onvif_pass, p.ptz_enabled, p.autotracking
+                    FROM cameras c
+                    LEFT JOIN camera_sensitivity s ON s.camera_id = c.id
+                    LEFT JOIN cameras_ptz p ON p.camera_id = c.id
+                    ORDER BY c.id ASC
+                """)
+                rows = [dict(row) for row in cursor.fetchall()]
+            except sqlite3.DatabaseError:
+                # Fallback: query without PTZ join if cameras_ptz table is missing/corrupt
+                cursor.execute("""
+                    SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
+                           COALESCE(s.level, 'default') AS level
+                    FROM cameras c
+                    LEFT JOIN camera_sensitivity s ON s.camera_id = c.id
+                    ORDER BY c.id ASC
+                """)
+                rows = [dict(row) for row in cursor.fetchall()]
+                for row in rows:
+                    row.update({"onvif_host": None, "onvif_port": None, "onvif_user": None,
+                                "onvif_pass": None, "ptz_enabled": False, "autotracking": False})
         for row in rows:
             row["alert_classes"] = json.loads(row["alert_classes"]) if row.get("alert_classes") else None
             row["exclusion_zones"] = json.loads(row["exclusion_zones"]) if row.get("exclusion_zones") else None
@@ -486,17 +524,26 @@ class EventStorage:
     def get_camera(self, camera_id: int):
         with self.lock:
             cursor = self.connection.cursor()
-            cursor.execute("""
-                SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
-                       p.onvif_host, p.onvif_port, p.onvif_user, p.onvif_pass, p.ptz_enabled, p.autotracking
-                FROM cameras c
-                LEFT JOIN cameras_ptz p ON p.camera_id = c.id
-                WHERE c.id = ?
-            """, (camera_id,))
-            row = cursor.fetchone()
-            if not row:
-                return None
-            camera = dict(row)
+            try:
+                cursor.execute("""
+                    SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
+                           p.onvif_host, p.onvif_port, p.onvif_user, p.onvif_pass, p.ptz_enabled, p.autotracking
+                    FROM cameras c
+                    LEFT JOIN cameras_ptz p ON p.camera_id = c.id
+                    WHERE c.id = ?
+                """, (camera_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                camera = dict(row)
+            except sqlite3.DatabaseError:
+                cursor.execute("SELECT * FROM cameras WHERE id = ?", (camera_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                camera = dict(row)
+                camera.update({"onvif_host": None, "onvif_port": None, "onvif_user": None,
+                               "onvif_pass": None, "ptz_enabled": False, "autotracking": False})
         camera["alert_classes"] = json.loads(camera["alert_classes"]) if camera.get("alert_classes") else None
         camera["exclusion_zones"] = json.loads(camera["exclusion_zones"]) if camera.get("exclusion_zones") else None
         camera["mask_polygons"] = json.loads(camera["mask_polygons"]) if camera.get("mask_polygons") else None
