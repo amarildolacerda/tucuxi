@@ -170,6 +170,11 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.event_bus = event_bus
     storage = EventStorage(db_path) if db_path is not None else EventStorage()
+
+    # PTZ Manager
+    from .ptz import PTZManager
+    ptz_manager = PTZManager(storage)
+    app.ptz_manager = ptz_manager
     # recognizer_factory hook: tests or callers may set app.recognizer_factory = lambda storage: recognizer
     def _make_recognizer() -> Optional[object]:
         # Prefer the shared recognizer used by the camera workers so cache

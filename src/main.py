@@ -74,13 +74,14 @@ def _worker_healthy(last_frame_time, now, timeout):
 
 
 class CameraWorker:
-    def __init__(self, camera, storage: EventStorage, alerts: AlertService, object_detector: ObjectDetector, identity_recognizer=None, event_bus=None):
+    def __init__(self, camera, storage: EventStorage, alerts: AlertService, object_detector: ObjectDetector, identity_recognizer=None, event_bus=None, autotracker=None):
         self.camera = camera
         self.storage = storage
         self.alerts = alerts
         self.object_detector = object_detector
         self.identity_recognizer = identity_recognizer
         self.event_bus = event_bus
+        self.autotracker = autotracker
         self._privacy_check_time = 0.0
         self._privacy_on = False
         self.last_frame_time = None
@@ -433,6 +434,13 @@ class CameraWorker:
 
                     tracks = tracker.update(detections, now=now)
 
+                    # Autotracking: follow detected persons
+                    if self.autotracker and self.camera.get("autotracking"):
+                        camera_id = self.camera.get("id")
+                        ptz_cmd = self.autotracker.process_detection(camera_id, detections)
+                        if ptz_cmd:
+                            self.autotracker.execute_move(camera_id, ptz_cmd["pan"], ptz_cmd["tilt"], ptz_cmd.get("zoom", 0.0))
+
                     loitering = check_loitering(
                         tracks, now, LOITERING_SECONDS, LOITERING_MAX_DISTANCE, set(LOITERING_LABELS)
                     )
@@ -641,13 +649,14 @@ def frames_similar(a, b, threshold):
 
 
 class CameraManager:
-    def __init__(self, storage: EventStorage, alerts: AlertService, object_detector: ObjectDetector, identity_recognizer=None, event_bus=None, sensitivity_manager=None):
+    def __init__(self, storage: EventStorage, alerts: AlertService, object_detector: ObjectDetector, identity_recognizer=None, event_bus=None, sensitivity_manager=None, autotracker=None):
         self.storage = storage
         self.alerts = alerts
         self.object_detector = object_detector
         self.identity_recognizer = identity_recognizer
         self.event_bus = event_bus
         self.sensitivity_manager = sensitivity_manager
+        self.autotracker = autotracker
         self.workers = {}
         self.lock = threading.Lock()
         self.monitor_thread = threading.Thread(target=self.monitor_cameras, daemon=True)
@@ -666,7 +675,7 @@ class CameraManager:
                 for camera in cameras:
                     cam_id = camera["id"]
                     if cam_id not in active_ids:
-                        worker = CameraWorker(camera, self.storage, self.alerts, self.object_detector, self.identity_recognizer, self.event_bus)
+                        worker = CameraWorker(camera, self.storage, self.alerts, self.object_detector, self.identity_recognizer, self.event_bus, autotracker=self.autotracker)
                         worker.start()
                         self.workers[cam_id] = worker
                         # Apply sensitivity from DB
@@ -726,6 +735,8 @@ class CameraManager:
 def main():
     storage = EventStorage()
     storage.ensure_default_routing(DEFAULT_ROUTING)
+    from .notifications import ensure_snapshot_automation_routing
+    ensure_snapshot_automation_routing(storage)
     alerts = AlertService(storage=storage)
     alerts.register_handler(telegram_handler)
     alerts.register_handler(mqtt_handler)
@@ -753,7 +764,13 @@ def main():
     event_bus = LocalEventQueue()
     from .sensitivity import SensitivityManager
     sensitivity_manager = SensitivityManager(storage)
-    camera_manager = CameraManager(storage, alerts, object_detector, identity_recognizer, event_bus, sensitivity_manager)
+
+    # PTZ + Autotracking
+    from .ptz import PTZManager, Autotracker
+    ptz_manager = PTZManager(storage)
+    autotracker = Autotracker(ptz_manager)
+
+    camera_manager = CameraManager(storage, alerts, object_detector, identity_recognizer, event_bus, sensitivity_manager, autotracker=autotracker)
     camera_manager.start()
 
     # Consumidor da fila: AlertRuleEngine decide N2–N4 (persiste, alerta e
