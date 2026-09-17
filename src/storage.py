@@ -469,9 +469,11 @@ class EventStorage:
             cursor = self.connection.cursor()
             cursor.execute("""
                 SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
-                       COALESCE(s.level, 'default') AS level
+                       COALESCE(s.level, 'default') AS level,
+                       p.onvif_host, p.onvif_port, p.onvif_user, p.onvif_pass, p.ptz_enabled, p.autotracking
                 FROM cameras c
                 LEFT JOIN camera_sensitivity s ON s.camera_id = c.id
+                LEFT JOIN cameras_ptz p ON p.camera_id = c.id
                 ORDER BY c.id ASC
             """)
             rows = [dict(row) for row in cursor.fetchall()]
@@ -484,7 +486,13 @@ class EventStorage:
     def get_camera(self, camera_id: int):
         with self.lock:
             cursor = self.connection.cursor()
-            cursor.execute("SELECT id, name, source, zone, alert_classes, exclusion_zones, mask_polygons FROM cameras WHERE id = ?", (camera_id,))
+            cursor.execute("""
+                SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
+                       p.onvif_host, p.onvif_port, p.onvif_user, p.onvif_pass, p.ptz_enabled, p.autotracking
+                FROM cameras c
+                LEFT JOIN cameras_ptz p ON p.camera_id = c.id
+                WHERE c.id = ?
+            """, (camera_id,))
             row = cursor.fetchone()
             if not row:
                 return None
