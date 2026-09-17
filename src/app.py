@@ -663,6 +663,14 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         cams = storage.list_cameras()
         return jsonify(_filter_cameras(cams, user))
 
+    @app.route("/cameras/<int:camera_id>")
+    @app.route("/api/cameras/<int:camera_id>")
+    def get_camera(camera_id):
+        camera = storage.get_camera(camera_id)
+        if not camera:
+            return jsonify({"error": "Câmera não encontrada"}), 404
+        return jsonify(camera)
+
     @app.route("/cameras", methods=["POST"])
     @require_permission("manage_cameras")
     def add_camera():

@@ -773,16 +773,35 @@ async function savePTZConfig(cameraId) {
     } catch { onvifHost = sourceInput.value; }
   }
 
-  await fetch(`/api/cameras/${cameraId}/ptz/config`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ onvif_host: onvifHost, onvif_port: onvifPort, onvif_user: onvifUser, onvif_pass: onvifPass, ptz_enabled: ptzEnabled }),
-  });
-  await fetch(`/api/cameras/${cameraId}/ptz/autotracking`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled: autotracking }),
-  });
+  const message = document.getElementById('camera-form-message');
+  try {
+    const resp = await fetch(`/api/cameras/${cameraId}/ptz/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ onvif_host: onvifHost, onvif_port: onvifPort, onvif_user: onvifUser, onvif_pass: onvifPass, ptz_enabled: ptzEnabled }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      if (message) {
+        message.textContent = err.error || 'Falha ao salvar configuração PTZ.';
+        message.classList.add('error');
+      }
+      return false;
+    }
+    // Autotracking (only after PTZ config record exists)
+    await fetch(`/api/cameras/${cameraId}/ptz/autotracking`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: autotracking }),
+    });
+    return true;
+  } catch (e) {
+    if (message) {
+      message.textContent = 'Erro ao salvar PTZ: ' + e.message;
+      message.classList.add('error');
+    }
+    return false;
+  }
 }
 
 async function submitCameraForm(event) {
