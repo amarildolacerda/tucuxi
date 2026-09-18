@@ -16,17 +16,21 @@ O bot Telegram atual é unidirecional: envia alertas mas não responde a comando
 
 ### Comandos
 
-| Comando | Descrição |
-|---------|-----------|
-| `/start` | Mensagem de boas-vindas com lista de comandos |
-| `/status` | Resumo: câmeras ativas, modo de alarme, último evento |
-| `/snapshot <id\|nome>` | Captura e envia snapshot da câmera especificada |
+| Comando | Descrição | Prioridade |
+|---------|-----------|------------|
+| `/start` | Mensagem de boas-vindas com lista de comandos | Alta |
+| `/status` | Resumo: câmeras ativas, modo de alarme, último evento | Alta |
+| `/snapshot <id\|nome>` | Captura e envia snapshot da câmera especificada | Alta |
+| `/alarm <modo>` | Altera modo de alarme (armed_home, armed_away, disarmed) | Alta |
+| `/events [N]` | Lista últimos N eventos (padrão: 5) | Alta |
+| `/cameras` | Lista todas as câmeras com nome, zona e status | Média |
+| `/help` | Lista detalhada de todos os comandos | Média |
 
 ### Arquitetura
 
 1. **Nova função `telegram_command_handler`** em `src/alerts.py`
    - Usa `getUpdates` do Telegram API para polling
-   - Processa comandos: `/start`, `/status`, `/snapshot`
+   - Processa comandos: `/start`, `/status`, `/snapshot`, `/alarm`, `/events`, `/cameras`, `/help`
    - Valida `chat_id` contra `TELEGRAM_CHAT_ID`
 
 2. **Thread de polling** em `src/main.py`
