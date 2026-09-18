@@ -34,7 +34,10 @@ DEFAULT_ROUTING = {
     "automation": {
         "motion_detected": True,
         "no_motion": True,
-        "snapshot_info": False,
+        # True: detecção de objetos também move o binary_sensor Motion do HA
+        # (mqtt_handler publica ON para snapshot_info). DBs legados semeados
+        # com False são corrigidos uma vez por ensure_snapshot_automation_routing.
+        "snapshot_info": True,
         "identity_recognized": True,
         "intruder_detected": True,
         "loitering": True,
@@ -60,3 +63,19 @@ def is_enabled(routing: dict, channel: str, event_type: str) -> bool:
     if channel_routing is not None and event_type in channel_routing:
         return bool(channel_routing[event_type])
     return DEFAULT_ROUTING.get(channel, {}).get(event_type, True)
+
+
+SNAPSHOT_AUTOMATION_FIX_KEY = "routing_fix_snapshot_automation_v1"
+
+
+def ensure_snapshot_automation_routing(storage) -> bool:
+    """Reparo único: DBs semeados com automation.snapshot_info=False deixavam
+    o binary_sensor Motion do HA preso em OFF em detecções só de objetos
+    (ex.: truck via snapshot_info). Habilita uma vez; alterações posteriores
+    do usuário na página de notificações são respeitadas."""
+    if storage.get_setting(SNAPSHOT_AUTOMATION_FIX_KEY):
+        return False
+    if not storage.get_routing("automation").get("snapshot_info", False):
+        storage.set_routing("automation", "snapshot_info", True)
+    storage.set_setting(SNAPSHOT_AUTOMATION_FIX_KEY, "true")
+    return True

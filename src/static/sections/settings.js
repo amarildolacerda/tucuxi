@@ -217,6 +217,10 @@ async function renderSensitivityConfig() {
 async function selectLevel(cameraId, level, camDiv) {
   const desc = camDiv.querySelector('.sensitivity-desc');
   if (desc) desc.textContent = LEVEL_DESCS[level] || '';
+  // Update button active state visually
+  camDiv.querySelectorAll('.sensitivity-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sensitivityLevel === level);
+  });
   const resp = await fetch(`/api/cameras/${cameraId}/sensitivity`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

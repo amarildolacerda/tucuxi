@@ -61,6 +61,74 @@ def test_telegram_handler_sends_message(monkeypatch):
     assert called["timeout"] == 10
 
 
+def test_mqtt_handler_motion_state_on_off(monkeypatch):
+    """Contrato com o HA: movimento publica ON, nomotion publica OFF
+    no state do binary_sensor (payloads padrão do HA)."""
+    monkeypatch.setenv("MQTT_BROKER_URL", "test-broker")
+    monkeypatch.setenv("MQTT_BROKER_PORT", "1883")
+    monkeypatch.setenv("MQTT_TOPIC", "test/topic")
+
+    all_calls = []
+
+    def fake_publish_single(topic, payload=None, hostname=None, port=None, auth=None, qos=None, retain=None):
+        all_calls.append({"topic": topic, "payload": payload})
+
+    monkeypatch.setattr("src.alerts.publish.single", fake_publish_single)
+
+    mqtt_handler({"camera_id": "1", "event_type": "motion_detected"})
+    state_calls = [c for c in all_calls if c["topic"] == "secur/secur_cam1/state"]
+    assert state_calls and state_calls[-1]["payload"] == "ON"
+
+    all_calls.clear()
+    mqtt_handler({"camera_id": "1", "event_type": "no_motion"})
+    state_calls = [c for c in all_calls if c["topic"] == "secur/secur_cam1/state"]
+    assert state_calls and state_calls[-1]["payload"] == "OFF"
+
+
+def test_motion_discovery_uses_on_off_payloads(monkeypatch):
+    """Discovery do binary_sensor Motion deve declarar payload_on=ON /
+    payload_off=OFF (padrão do HA) e estado inicial OFF."""
+    import json as _json
+    import paho.mqtt.client as _mqtt
+    from src.alerts import mqtt_register_device
+
+    monkeypatch.setenv("MQTT_BROKER_URL", "test-broker")
+    monkeypatch.setenv("MQTT_BROKER_PORT", "1883")
+
+    published = {}
+
+    class FakeClient:
+        def username_pw_set(self, *a, **k):
+            pass
+
+        def connect_async(self, *a, **k):
+            pass
+
+        def loop_start(self):
+            pass
+
+        def is_connected(self):
+            return True
+
+        def publish(self, topic, payload=None, qos=None, retain=None):
+            published[topic] = payload
+
+        def loop_stop(self):
+            pass
+
+        def disconnect(self):
+            pass
+
+    monkeypatch.setattr(_mqtt, "Client", FakeClient)
+    mqtt_register_device([{"id": 1, "name": "Cam", "zone": "Geral"}])
+
+    config = _json.loads(published["homeassistant/binary_sensor/secur_cam1_motion/config"])
+    assert config["state_topic"] == "secur/secur_cam1/state"
+    assert config["payload_on"] == "ON"
+    assert config["payload_off"] == "OFF"
+    assert published["secur/secur_cam1/state"] == "OFF"
+
+
 def test_mqtt_handler_publishes(monkeypatch):
     monkeypatch.setenv("MQTT_BROKER_URL", "test-broker")
     monkeypatch.setenv("MQTT_BROKER_PORT", "1883")
@@ -153,7 +221,9 @@ def test_default_routing_no_motion_off_telegram():
     assert DEFAULT_ROUTING["telegram"]["no_motion"] is False
     assert DEFAULT_ROUTING["telegram"]["motion_detected"] is True
     assert DEFAULT_ROUTING["automation"]["no_motion"] is True
-    assert DEFAULT_ROUTING["automation"]["snapshot_info"] is False
+    # True: snapshot_info (ex.: truck) move o binary_sensor Motion do HA.
+    # Era False e deixava o motion preso em OFF em detecções só de objetos.
+    assert DEFAULT_ROUTING["automation"]["snapshot_info"] is True
 
 
 def test_default_routing_behavior_events():

@@ -17,8 +17,8 @@ from pathlib import Path
 
 # Fix Windows console encoding
 if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 RTSP_PATHS = [
     "/stream", "/stream1", "/live", "/1", "/0",
@@ -129,6 +129,7 @@ def save_preview(ip, frame, output_dir="previews"):
 
 
 def main():
+    print("\n  Tucuxi Camera Scan -- RTSP + preview + links\n")
     parser = argparse.ArgumentParser(description="Scan RTSP + preview + links")
     parser.add_argument("--base", default="192.168.1.")
     parser.add_argument("--start", type=int, default=100)
@@ -141,7 +142,9 @@ def main():
     parser.add_argument("--no-preview", dest="preview", action="store_false")
     args = parser.parse_args()
 
+    print(f"\n  Tucuxi Camera Scan -- {time.strftime('%Y-%m-%d %H:%M:%S')}")
     dispositivos = scan_rtsp_network(args.base, args.start, args.end, args.port, args.timeout)
+    print("\n Scan concluido.\n")
     if not dispositivos:
         print("\n  Nenhum dispositivo RTSP encontrado.")
         return

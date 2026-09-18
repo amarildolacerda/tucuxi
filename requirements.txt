@@ -6,3 +6,4 @@ pytest
 requests
 paho-mqtt
 pyyaml
+onvif-zeep
