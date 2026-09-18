@@ -83,7 +83,10 @@ def test_mqtt_only_intruder(monkeypatch):
 
     instances.clear()
     service.send("1", "Entrada", "snapshot_info", details="x")
-    assert not (instances and instances[0].published), "snapshot_info must NOT publish to MQTT"
+    # snapshot_info PUBLICA no MQTT (move o binary_sensor Motion do HA).
+    # Era bloqueado pelo default automation.snapshot_info=False (motion preso em OFF).
+    assert instances and instances[0].published, "snapshot_info must publish to MQTT"
+    assert ("secur/secur_cam1/state", "ON") in instances[0].published
 
 
 def test_ha_receives_all_identity_events(monkeypatch):

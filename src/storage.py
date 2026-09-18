@@ -32,7 +32,31 @@ class EventStorage:
         self.connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
         self.lock = threading.Lock()
+        # Check DB integrity before creating tables
+        if not running_pytest and self.db_path.exists():
+            try:
+                cur = self.connection.execute("PRAGMA integrity_check")
+                result = cur.fetchone()
+                if result and result[0] != "ok":
+                    logger.warning("Database corruption detected, attempting recovery")
+                    self._recover_database()
+            except Exception as e:
+                logger.warning("Integrity check failed: %s — attempting recovery", e)
+                self._recover_database()
         self._create_tables()
+
+    def _recover_database(self):
+        """Backup corrupted DB and recreate fresh."""
+        backup_path = self.db_path.with_suffix(".db.corrupt")
+        try:
+            shutil.copy2(str(self.db_path), str(backup_path))
+            logger.info("Corrupted DB backed up to %s", backup_path)
+            self.db_path.unlink(missing_ok=True)
+            self.connection.close()
+            self.connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
+            self.connection.row_factory = sqlite3.Row
+        except Exception as e:
+            logger.error("Recovery failed: %s", e)
 
     def _create_tables(self):
         with self.lock:
@@ -189,6 +213,35 @@ class EventStorage:
                     custom_params TEXT,
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY (camera_id) REFERENCES cameras(id)
+                )
+                """
+            )
+            # ── PTZ tables ──
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS cameras_ptz (
+                    camera_id INTEGER PRIMARY KEY,
+                    onvif_host TEXT NOT NULL,
+                    onvif_port INTEGER DEFAULT 80,
+                    onvif_user TEXT,
+                    onvif_pass TEXT,
+                    ptz_enabled BOOLEAN DEFAULT 0,
+                    autotracking BOOLEAN DEFAULT 0,
+                    updated_at TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (camera_id) REFERENCES cameras(id) ON DELETE CASCADE
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ptz_presets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    camera_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    position TEXT NOT NULL,
+                    onvif_token TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (camera_id) REFERENCES cameras(id) ON DELETE CASCADE
                 )
                 """
             )
@@ -439,14 +492,30 @@ class EventStorage:
     def list_cameras(self):
         with self.lock:
             cursor = self.connection.cursor()
-            cursor.execute("""
-                SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
-                       COALESCE(s.level, 'default') AS level
-                FROM cameras c
-                LEFT JOIN camera_sensitivity s ON s.camera_id = c.id
-                ORDER BY c.id ASC
-            """)
-            rows = [dict(row) for row in cursor.fetchall()]
+            try:
+                cursor.execute("""
+                    SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
+                           COALESCE(s.level, 'default') AS level,
+                           p.onvif_host, p.onvif_port, p.onvif_user, p.onvif_pass, p.ptz_enabled, p.autotracking
+                    FROM cameras c
+                    LEFT JOIN camera_sensitivity s ON s.camera_id = c.id
+                    LEFT JOIN cameras_ptz p ON p.camera_id = c.id
+                    ORDER BY c.id ASC
+                """)
+                rows = [dict(row) for row in cursor.fetchall()]
+            except sqlite3.DatabaseError:
+                # Fallback: query without PTZ join if cameras_ptz table is missing/corrupt
+                cursor.execute("""
+                    SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
+                           COALESCE(s.level, 'default') AS level
+                    FROM cameras c
+                    LEFT JOIN camera_sensitivity s ON s.camera_id = c.id
+                    ORDER BY c.id ASC
+                """)
+                rows = [dict(row) for row in cursor.fetchall()]
+                for row in rows:
+                    row.update({"onvif_host": None, "onvif_port": None, "onvif_user": None,
+                                "onvif_pass": None, "ptz_enabled": False, "autotracking": False})
         for row in rows:
             row["alert_classes"] = json.loads(row["alert_classes"]) if row.get("alert_classes") else None
             row["exclusion_zones"] = json.loads(row["exclusion_zones"]) if row.get("exclusion_zones") else None
@@ -456,11 +525,26 @@ class EventStorage:
     def get_camera(self, camera_id: int):
         with self.lock:
             cursor = self.connection.cursor()
-            cursor.execute("SELECT id, name, source, zone, alert_classes, exclusion_zones, mask_polygons FROM cameras WHERE id = ?", (camera_id,))
-            row = cursor.fetchone()
-            if not row:
-                return None
-            camera = dict(row)
+            try:
+                cursor.execute("""
+                    SELECT c.id, c.name, c.source, c.zone, c.alert_classes, c.exclusion_zones, c.mask_polygons,
+                           p.onvif_host, p.onvif_port, p.onvif_user, p.onvif_pass, p.ptz_enabled, p.autotracking
+                    FROM cameras c
+                    LEFT JOIN cameras_ptz p ON p.camera_id = c.id
+                    WHERE c.id = ?
+                """, (camera_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                camera = dict(row)
+            except sqlite3.DatabaseError:
+                cursor.execute("SELECT * FROM cameras WHERE id = ?", (camera_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                camera = dict(row)
+                camera.update({"onvif_host": None, "onvif_port": None, "onvif_user": None,
+                               "onvif_pass": None, "ptz_enabled": False, "autotracking": False})
         camera["alert_classes"] = json.loads(camera["alert_classes"]) if camera.get("alert_classes") else None
         camera["exclusion_zones"] = json.loads(camera["exclusion_zones"]) if camera.get("exclusion_zones") else None
         camera["mask_polygons"] = json.loads(camera["mask_polygons"]) if camera.get("mask_polygons") else None
@@ -492,6 +576,75 @@ class EventStorage:
             return
         for camera in default_cameras:
             self.add_camera(camera["name"], camera["source"], camera.get("zone"))
+
+    # ── PTZ CRUD ──
+
+    def add_camera_ptz(self, camera_id, onvif_host, onvif_port=80, onvif_user=None, onvif_pass=None):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "INSERT OR REPLACE INTO cameras_ptz (camera_id, onvif_host, onvif_port, onvif_user, onvif_pass) VALUES (?, ?, ?, ?, ?)",
+                (camera_id, onvif_host, onvif_port, onvif_user, onvif_pass),
+            )
+            self.connection.commit()
+            return cursor.rowcount > 0
+
+    def get_camera_ptz(self, camera_id):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT * FROM cameras_ptz WHERE camera_id = ?", (camera_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def update_camera_ptz(self, camera_id, **kwargs):
+        with self.lock:
+            fields = []
+            values = []
+            for key, val in kwargs.items():
+                if key in ("onvif_host", "onvif_port", "onvif_user", "onvif_pass", "ptz_enabled", "autotracking"):
+                    fields.append(f"{key} = ?")
+                    values.append(val)
+            if not fields:
+                return False
+            fields.append("updated_at = datetime('now')")
+            values.append(camera_id)
+            cursor = self.connection.cursor()
+            cursor.execute(f"UPDATE cameras_ptz SET {', '.join(fields)} WHERE camera_id = ?", values)
+            self.connection.commit()
+            return cursor.rowcount > 0
+
+    def remove_camera_ptz(self, camera_id):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute("DELETE FROM cameras_ptz WHERE camera_id = ?", (camera_id,))
+            self.connection.commit()
+            return cursor.rowcount > 0
+
+    def add_ptz_preset(self, camera_id, name, position, onvif_token=None):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "INSERT INTO ptz_presets (camera_id, name, position, onvif_token) VALUES (?, ?, ?, ?)",
+                (camera_id, name, json.dumps(position), onvif_token),
+            )
+            self.connection.commit()
+            return cursor.lastrowid
+
+    def list_ptz_presets(self, camera_id):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT * FROM ptz_presets WHERE camera_id = ? ORDER BY id", (camera_id,))
+            rows = [dict(row) for row in cursor.fetchall()]
+        for row in rows:
+            row["position"] = json.loads(row["position"])
+        return rows
+
+    def remove_ptz_preset(self, preset_id):
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute("DELETE FROM ptz_presets WHERE id = ?", (preset_id,))
+            self.connection.commit()
+            return cursor.rowcount > 0
 
     def add_zone(self, name: str, classification: str = 'pública', schedule=None, retention_policy=None, direction_line=None):
         with self.lock:

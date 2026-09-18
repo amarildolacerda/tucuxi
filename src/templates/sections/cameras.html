@@ -92,11 +92,52 @@
                 </div>
                 <small id="camera-preview-note" class="preview-note" aria-live="polite"></small>
             </div>
+            <div class="form-row ptz-section">
+                <label>PTZ (Pan/Tilt/Zoom)</label>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="camera-ptz-enabled"> PTZ habilitado
+                    </label>
+                </div>
+                <div id="ptz-config-fields" class="hidden-panel">
+                    <div class="form-row">
+                        <label for="camera-onvif-port">Porta ONVIF</label>
+                        <input id="camera-onvif-port" type="number" value="80" placeholder="80">
+                    </div>
+                    <div class="form-row">
+                        <label for="camera-onvif-user">Usuário ONVIF</label>
+                        <input id="camera-onvif-user" type="text" placeholder="admin">
+                    </div>
+                    <div class="form-row">
+                        <label for="camera-onvif-pass">Senha ONVIF</label>
+                        <input id="camera-onvif-pass" type="password" placeholder="••••">
+                    </div>
+                    <div class="checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="camera-autotracking"> Autotracking (auto-follow)
+                        </label>
+                    </div>
+                </div>
+            </div>
             <div class="form-actions">
                 <button type="submit" class="button-primary" id="camera-form-submit">Salvar</button>
                 <button type="button" class="button-secondary" id="cancel-camera-edit">Cancelar</button>
             </div>
             <span id="camera-form-message" class="form-message"></span>
         </form>
+    </div>
+    <div id="ptz-controls-panel" class="hidden-panel" style="margin-top:1rem;padding:1rem;border:1px solid var(--border);border-radius:var(--radius);">
+        <h3 id="ptz-controls-title">Controles PTZ</h3>
+        <div class="ptz-controls">
+            <button class="button-mini ptz-btn" data-pan="-0.5" data-tilt="0" title="←">←</button>
+            <button class="button-mini ptz-btn" data-pan="0" data-tilt="0.5" title="↑">↑</button>
+            <button class="button-mini ptz-btn ptz-btn-stop" data-stop="1" title="Stop">⏹</button>
+            <button class="button-mini ptz-btn" data-pan="0" data-tilt="-0.5" title="↓">↓</button>
+            <button class="button-mini ptz-btn" data-pan="0.5" data-tilt="0" title="→">→</button>
+        </div>
+        <div class="ptz-presets" style="margin-top:0.5rem;">
+            <button class="button-mini" id="ptz-save-preset">Salvar posição</button>
+            <div id="ptz-preset-list"></div>
+        </div>
     </div>
 </div>

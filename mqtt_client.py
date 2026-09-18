@@ -13,7 +13,7 @@ PASSWORD = "123"
 
 # Option 1: Subscribe to ALL topics (wildcard) - best for discovery
 # Option 2: Specific topics (comment out wildcard line below)
-TOPICS = [("tucuxi/#", 1)]  # Wildcard: catches ALL MQTT topics
+TOPICS = [("#", 1)]  # Wildcard: catches ALL MQTT topics
 
 # Specific topics (uncomment if you want only specific topics):
 # TOPICS = [

@@ -680,6 +680,8 @@ function setCameraFormMode(mode, camera = null) {
   resetCameraPreview();
   if (mode === 'edit' && camera) {
     loadPreviewFrame(camera.id);
+    loadPTZConfig(camera.id);
+    initPTZControls(camera.id);
   } else {
     drawCameraPreview();
   }
@@ -700,6 +702,8 @@ function hideCameraForm() {
     dialog.classList.add('hidden-panel');
     setCameraFormMode('add');
   }
+  const ptzPanel = document.getElementById("ptz-controls-panel");
+  if (ptzPanel) ptzPanel.classList.add("hidden-panel");
 }
 
 function resetCameraList() {
@@ -721,6 +725,83 @@ function bindSensitivityButtons() {
   select.addEventListener('change', () => {
     initCameraSensitivity(select.value);
   });
+}
+
+function bindPTZToggle() {
+  const ptzCheckbox = document.getElementById('camera-ptz-enabled');
+  const configFields = document.getElementById('ptz-config-fields');
+  if (!ptzCheckbox || !configFields) return;
+  ptzCheckbox.addEventListener('change', () => {
+    configFields.classList.toggle('hidden-panel', !ptzCheckbox.checked);
+  });
+}
+
+async function loadPTZConfig(cameraId) {
+  try {
+    const resp = await fetch(`/cameras/${cameraId}`);
+    if (!resp.ok) return;
+    const camera = await resp.json();
+    const ptzCheckbox = document.getElementById('camera-ptz-enabled');
+    const portInput = document.getElementById('camera-onvif-port');
+    const userInput = document.getElementById('camera-onvif-user');
+    const passInput = document.getElementById('camera-onvif-pass');
+    const autoCheckbox = document.getElementById('camera-autotracking');
+    if (ptzCheckbox) ptzCheckbox.checked = !!camera.ptz_enabled;
+    if (portInput) portInput.value = camera.onvif_port || 80;
+    if (userInput) userInput.value = camera.onvif_user || '';
+    if (passInput) passInput.value = camera.onvif_pass || '';
+    if (autoCheckbox) autoCheckbox.checked = !!camera.autotracking;
+    const configFields = document.getElementById('ptz-config-fields');
+    if (configFields) configFields.classList.toggle('hidden-panel', !camera.ptz_enabled);
+  } catch (e) { /* ignore */ }
+}
+
+async function savePTZConfig(cameraId) {
+  const ptzEnabled = document.getElementById('camera-ptz-enabled')?.checked || false;
+  const onvifPort = parseInt(document.getElementById('camera-onvif-port')?.value || '80', 10);
+  const onvifUser = document.getElementById('camera-onvif-user')?.value || '';
+  const onvifPass = document.getElementById('camera-onvif-pass')?.value || '';
+  const autotracking = document.getElementById('camera-autotracking')?.checked || false;
+
+  // Extract host from camera source (RTSP URL) or use source directly
+  const sourceInput = document.getElementById('camera-source');
+  let onvifHost = '';
+  if (sourceInput?.value) {
+    try {
+      const url = new URL(sourceInput.value.replace('rtsp://', 'http://'));
+      onvifHost = url.hostname;
+    } catch { onvifHost = sourceInput.value; }
+  }
+
+  const message = document.getElementById('camera-form-message');
+  try {
+    const resp = await fetch(`/api/cameras/${cameraId}/ptz/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ onvif_host: onvifHost, onvif_port: onvifPort, onvif_user: onvifUser, onvif_pass: onvifPass, ptz_enabled: ptzEnabled }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      if (message) {
+        message.textContent = err.error || 'Falha ao salvar configuração PTZ.';
+        message.classList.add('error');
+      }
+      return false;
+    }
+    // Autotracking (only after PTZ config record exists)
+    await fetch(`/api/cameras/${cameraId}/ptz/autotracking`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: autotracking }),
+    });
+    return true;
+  } catch (e) {
+    if (message) {
+      message.textContent = 'Erro ao salvar PTZ: ' + e.message;
+      message.classList.add('error');
+    }
+    return false;
+  }
 }
 
 async function submitCameraForm(event) {
@@ -812,6 +893,9 @@ async function submitCameraForm(event) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ level: selectedSensitivityLevel }),
       });
+      if (document.getElementById('camera-ptz-enabled')) {
+        await savePTZConfig(camId);
+      }
     }
 
     hideCameraForm();
@@ -1015,6 +1099,7 @@ function setupCameraForm() {
 
   setupPolyEditorButtons();
   bindSensitivityButtons();
+  bindPTZToggle();
 }
 
 async function refreshCameras() {
@@ -1030,6 +1115,129 @@ async function refreshCameras() {
 export function initSection() {
   setupCameraForm();
   refreshCameras();
+}
+
+// ── PTZ Controls ──
+
+let currentPTZCameraId = null;
+
+let ptzPreviewTimer = null;
+async function pollPTZIdleForPreview(cameraId, intervalMs = 200, maxWaitMs = 5000) {
+  clearTimeout(ptzPreviewTimer);
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    try {
+      const resp = await fetch(`/api/cameras/${cameraId}/ptz/status`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.idle) {
+          await new Promise(r => setTimeout(r, 50));
+          loadPreviewFrame(cameraId);
+          return;
+        }
+      }
+    } catch (e) { /* ignore poll errors */ }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  loadPreviewFrame(cameraId);
+}
+
+function initPTZControls(cameraId) {
+  currentPTZCameraId = cameraId;
+  const panel = document.getElementById("ptz-controls-panel");
+  if (!panel) return;
+  panel.classList.remove("hidden-panel");
+
+  // Direction buttons
+  document.querySelectorAll(".ptz-btn").forEach(btn => {
+    if (btn.dataset.stop) {
+      btn.addEventListener("mousedown", () => {
+        ptzStop(cameraId);
+        pollPTZIdleForPreview(cameraId);
+      });
+    } else {
+      btn.addEventListener("mousedown", () => {
+        const pan = parseFloat(btn.dataset.pan || 0);
+        const tilt = parseFloat(btn.dataset.tilt || 0);
+        const zoom = parseFloat(btn.dataset.zoom || 0);
+        ptzMove(cameraId, pan, tilt, zoom);
+      });
+      btn.addEventListener("mouseup", () => {
+        ptzStop(cameraId);
+        pollPTZIdleForPreview(cameraId);
+      });
+      btn.addEventListener("mouseleave", () => {
+        ptzStop(cameraId);
+        pollPTZIdleForPreview(cameraId);
+      });
+    }
+  });
+
+  // Save preset button
+  const saveBtn = document.getElementById("ptz-save-preset");
+  if (saveBtn) {
+    saveBtn.onclick = () => ptzSavePreset(cameraId);
+  }
+
+  // Load presets
+  loadPTZPresets(cameraId);
+}
+
+async function ptzMove(cameraId, pan, tilt, zoom) {
+  try {
+    const resp = await fetch(`/api/cameras/${cameraId}/ptz/move`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({pan, tilt, zoom})
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      console.warn("PTZ move failed:", err.error || resp.status);
+    }
+  } catch (e) {
+    console.warn("PTZ move error:", e.message);
+  }
+}
+
+async function ptzStop(cameraId) {
+  try {
+    await fetch(`/api/cameras/${cameraId}/ptz/stop`, {method: "POST"});
+  } catch (e) {
+    console.warn("PTZ stop error:", e.message);
+  }
+}
+
+async function loadPTZPresets(cameraId) {
+  const resp = await fetch(`/api/cameras/${cameraId}/ptz/presets`);
+  const presets = await resp.json();
+  const list = document.getElementById("ptz-preset-list");
+  if (!list) return;
+  list.innerHTML = presets.map(p =>
+    `<span class="ptz-preset-item"><button class="button-mini ptz-preset-btn" data-preset-id="${p.id}">${escapeHtml(p.name)}</button><button class="button-mini ptz-preset-delete" data-preset-id="${p.id}" title="Excluir preset">×</button></span>`
+  ).join("");
+  list.querySelectorAll(".ptz-preset-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      fetch(`/api/cameras/${cameraId}/ptz/presets/${btn.dataset.presetId}/goto`, {method: "POST"});
+    });
+  });
+  list.querySelectorAll(".ptz-preset-delete").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      await fetch(`/api/cameras/${cameraId}/ptz/presets/${btn.dataset.presetId}`, {method: "DELETE"});
+      loadPTZPresets(cameraId);
+    });
+  });
+}
+
+async function ptzSavePreset(cameraId) {
+  const name = prompt("Nome do preset:");
+  if (!name) return;
+  // Get current position (would need to be tracked client-side or use a default)
+  await fetch(`/api/cameras/${cameraId}/ptz/presets`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name, position: {pan: 0, tilt: 0, zoom: 1}})
+  });
+  loadPTZPresets(cameraId);
 }
 
 export function teardownSection() {

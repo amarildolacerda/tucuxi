@@ -105,8 +105,9 @@ export function thumbPhaseBadge(item) {
 }
 
 let livePlayerInterval = null;
+let livePTZCameraId = null;
 
-export function openLivePlayer(cameraId, cameraName, source) {
+export function openLivePlayer(cameraId, cameraName, source, ptzEnabled = false) {
   const overlay = document.getElementById('live-player-overlay');
   const title = document.getElementById('live-player-title');
   const videoEl = document.getElementById('live-video');
@@ -146,6 +147,41 @@ export function openLivePlayer(cameraId, cameraName, source) {
       imgEl.src = `/camera/${cameraId}/snapshot?ts=${Date.now()}`;
     }, 500);
   }
+
+  // PTZ controls
+  const ptzContainer = document.getElementById('live-ptz-controls');
+  if (ptzContainer) {
+    ptzContainer.style.display = ptzEnabled ? '' : 'none';
+  }
+  livePTZCameraId = ptzEnabled ? cameraId : null;
+  if (ptzEnabled) {
+    document.querySelectorAll('#live-ptz-controls .ptz-btn').forEach(btn => {
+      if (btn.dataset.stop) {
+        btn.onmousedown = () => {
+          btn.classList.add('ptz-btn-active');
+          livePTZStop(cameraId);
+        };
+        btn.onmouseup = () => btn.classList.remove('ptz-btn-active');
+        btn.onmouseleave = () => btn.classList.remove('ptz-btn-active');
+      } else {
+        btn.onmousedown = () => {
+          btn.classList.add('ptz-btn-active');
+          const pan = parseFloat(btn.dataset.pan || 0);
+          const tilt = parseFloat(btn.dataset.tilt || 0);
+          const zoom = parseFloat(btn.dataset.zoom || 0);
+          livePTZMove(cameraId, pan, tilt, zoom);
+        };
+        btn.onmouseup = () => {
+          btn.classList.remove('ptz-btn-active');
+          livePTZStop(cameraId);
+        };
+        btn.onmouseleave = () => {
+          btn.classList.remove('ptz-btn-active');
+          livePTZStop(cameraId);
+        };
+      }
+    });
+  }
 }
 
 export function closeLivePlayer() {
@@ -161,6 +197,60 @@ export function closeLivePlayer() {
   if (livePlayerInterval) {
     clearInterval(livePlayerInterval);
     livePlayerInterval = null;
+  }
+  livePTZCameraId = null;
+  const ptzContainer = document.getElementById('live-ptz-controls');
+  if (ptzContainer) ptzContainer.style.display = 'none';
+}
+
+async function livePTZMove(cameraId, pan, tilt, zoom) {
+  try {
+    const resp = await fetch(`/api/cameras/${cameraId}/ptz/move`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({pan, tilt, zoom})
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      console.warn("PTZ move failed:", err.error || resp.status);
+    }
+  } catch (e) {
+    console.warn("PTZ move error:", e.message);
+  }
+}
+
+async function livePTZStop(cameraId) {
+  try {
+    await fetch(`/api/cameras/${cameraId}/ptz/stop`, {method: "POST"});
+  } catch (e) {
+    console.warn("PTZ stop error:", e.message);
+  }
+  pollPTZIdle(cameraId);
+}
+
+async function pollPTZIdle(cameraId, intervalMs = 200, maxWaitMs = 5000) {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    try {
+      const resp = await fetch(`/api/cameras/${cameraId}/ptz/status`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.idle) {
+          await new Promise(r => setTimeout(r, 50));
+          refreshLiveSnapshot(cameraId);
+          return;
+        }
+      }
+    } catch (e) { /* ignore poll errors */ }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  refreshLiveSnapshot(cameraId);
+}
+
+function refreshLiveSnapshot(cameraId) {
+  const imgEl = document.getElementById('live-snapshot');
+  if (imgEl && imgEl.offsetParent !== null) {
+    imgEl.src = `/camera/${cameraId}/snapshot?ts=${Date.now()}`;
   }
 }
 
