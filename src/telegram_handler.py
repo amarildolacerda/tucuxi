@@ -62,6 +62,15 @@ def telegram_command_handler(storage, camera_manager):
                 return
             _handle_snapshot(chat_id, args[0], camera_manager)
         
+        elif command in ("alarmhome", "alarmaway", "alarmdisarm"):
+            # Simple alarm commands without arguments
+            mode_map = {
+                "alarmhome": "armed_home",
+                "alarmaway": "armed_away",
+                "alarmdisarm": "disarmed",
+            }
+            _handle_alarm(chat_id, mode_map[command])
+        
         elif command == "alarm":
             if not args:
                 _send_message(chat_id, "Uso: /alarm <armed_home|armed_away|disarmed>")
@@ -69,7 +78,7 @@ def telegram_command_handler(storage, camera_manager):
             _handle_alarm(chat_id, args[0])
         
         elif command == "events":
-            count = int(args[0]) if args and args[0].isdigit() else 5
+            count = int(args[0]) if args and args[0].isdigit() else 10
             events = _get_events(storage, count)
             _send_message(chat_id, format_events_response(events))
         
