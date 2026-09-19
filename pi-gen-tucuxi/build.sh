@@ -34,7 +34,7 @@ cp -r "${SCRIPT_DIR}/stage5" "$PI_GEN_DIR/"
 # Build via Docker usando o script oficial do pi-gen
 echo "Iniciando build via Docker..."
 cd "$PI_GEN_DIR"
-sudo ./build-docker.sh
+sudo ./build-docker.sh -c config/config
 
 echo ""
 echo "=== Build concluído ==="
