@@ -1,5 +1,5 @@
 # Configuração do pi-gen para Tucuxi Monitor
-IMG_NAME='tucuxi-monitor-${RELEASE}'
+IMG_NAME='tucuxi-monitor'
 TARGET_HOSTNAME='tucuxi'
 FIRST_USER_NAME='tucuxi'
 FIRST_USER_PASS='tucuxi'
