@@ -9,6 +9,7 @@ def format_start_response() -> str:
     return (
         "🤖 *Bem-vindo ao Tucuxi!*\n\n"
         "Comandos disponíveis:\n"
+        "/start - Mensagem de boas-vindas\n"
         "/status - Status do sistema\n"
         "/snapshot <id|nome> - Captura da câmera\n"
         "/alarm <modo> - Alterar modo de alarme\n"
