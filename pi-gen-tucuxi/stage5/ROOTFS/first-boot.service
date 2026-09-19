@@ -1,0 +1,15 @@
+[Unit]
+Description=Tucuxi Monitor First Boot Configuration
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/tucuxi/first-boot.sh
+RemainAfterExit=yes
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

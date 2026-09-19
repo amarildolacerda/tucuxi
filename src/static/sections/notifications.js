@@ -8,13 +8,13 @@ async function renderNotifications() {
   try {
     data = await fetchData('/api/notifications');
   } catch (e) {
-    body.innerHTML = '<tr><td colspan="3">Falha ao carregar configuração.</td></tr>';
+    body.innerHTML = '<tr><td colspan="99">Falha ao carregar configuração.</td></tr>';
     return;
   }
 
-  const headerRow = document.getElementById('notif-channel-headers');
+  const headerRow = document.getElementById('notif-header-row');
   if (headerRow) {
-    headerRow.innerHTML = data.channels.map(c => `<th>${c.label}</th>`).join('');
+    headerRow.insertAdjacentHTML('beforeend', data.channels.map(c => `<th>${c.label}</th>`).join(''));
   }
 
   const events = data.events.filter(e => !e.legacy);
