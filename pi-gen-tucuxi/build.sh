@@ -24,6 +24,10 @@ if [ ! -d "$PI_GEN_DIR" ]; then
     git clone --depth 1 https://github.com/RPi-Distro/pi-gen.git "$PI_GEN_DIR"
 fi
 
+# Configurar diretório seguro para Git (evita erro de ownership no WSL)
+echo "Configurando diretório seguro para Git..."
+git config --global --add safe.directory "$PI_GEN_DIR"
+
 # Copiar configurações
 echo "Copiando configurações customizadas..."
 cp -r "${SCRIPT_DIR}/config" "$PI_GEN_DIR/"
