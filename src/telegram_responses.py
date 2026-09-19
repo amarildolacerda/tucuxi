@@ -1,7 +1,7 @@
 # src/telegram_responses.py
 """Telegram response formatters for Tucuxi bot."""
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 
 def format_start_response() -> str:
@@ -59,9 +59,11 @@ def format_events_response(events: list) -> str:
             try:
                 # Handle both numeric epoch and string timestamps
                 if isinstance(timestamp, (int, float)):
-                    ts = datetime.fromtimestamp(timestamp).strftime("%d/%m %H:%M")
+                    dt = datetime.fromtimestamp(timestamp, tz=timezone(timedelta(hours=-3)))
                 else:
-                    ts = str(timestamp)[:16]  # Truncate string timestamp
+                    # Parse ISO string and convert to local timezone
+                    dt = datetime.fromisoformat(str(timestamp)).astimezone(timezone(timedelta(hours=-3)))
+                ts = dt.strftime("%d/%m %H:%M")
             except (ValueError, TypeError):
                 ts = str(timestamp)[:16]
             text += f"{i}. {event_type} - Câmera {camera_id} ({ts})\n"
