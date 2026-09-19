@@ -51,7 +51,7 @@ def telegram_command_handler(storage, camera_manager):
             _send_message(chat_id, format_start_response())
         
         elif command == "status":
-            cameras = camera_manager.cameras if hasattr(camera_manager, "cameras") else []
+            cameras = camera_manager.storage.list_cameras() if hasattr(camera_manager, "storage") else []
             alarm_mode = _get_alarm_mode()
             last_event = _get_last_event(storage)
             _send_message(chat_id, format_status_response(cameras, alarm_mode, last_event))
@@ -74,7 +74,7 @@ def telegram_command_handler(storage, camera_manager):
             _send_message(chat_id, format_events_response(events))
         
         elif command == "cameras":
-            cameras = camera_manager.cameras if hasattr(camera_manager, "cameras") else []
+            cameras = camera_manager.storage.list_cameras() if hasattr(camera_manager, "storage") else []
             _send_message(chat_id, format_cameras_response(cameras))
         
         elif command == "help":
@@ -110,8 +110,9 @@ def _send_message(chat_id: int, text: str):
 def _handle_snapshot(chat_id: int, camera_ref: str, camera_manager):
     """Handle snapshot command."""
     # Find camera by ID or name
+    cameras = camera_manager.storage.list_cameras() if hasattr(camera_manager, "storage") else []
     camera = None
-    for cam in camera_manager.cameras if hasattr(camera_manager, "cameras") else []:
+    for cam in cameras:
         if str(cam.get("id")) == camera_ref or cam.get("name", "").lower() == camera_ref.lower():
             camera = cam
             break
