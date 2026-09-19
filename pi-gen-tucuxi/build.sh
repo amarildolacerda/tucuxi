@@ -40,6 +40,16 @@ else
     fi
 fi
 
+# Instalar dependências do pi-gen
+echo "Instalando dependências do pi-gen..."
+if [ "$IS_ROOT" = true ]; then
+    apt-get update
+    apt-get install -y quilt parted qemu-user-binfmt debootstrap zerofree zip dosfstools libarchive-tools arch-test
+else
+    sudo apt-get update
+    sudo apt-get install -y quilt parted qemu-user-binfmt debootstrap zerofree zip dosfstools libarchive-tools arch-test
+fi
+
 # Clonar pi-gen se não existir
 if [ ! -d "$PI_GEN_DIR" ]; then
     echo "Clonando pi-gen..."
