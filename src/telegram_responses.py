@@ -46,15 +46,23 @@ def format_status_response(cameras: list, alarm_mode: str, last_event: dict) -> 
     return text
 
 
-def format_events_response(events: list) -> str:
+def format_events_response(events: list, cameras: list | None = None) -> str:
     """Format events list response."""
     if not events:
         return "📋 *Eventos*\n\nNenhum evento registrado."
+    
+    # Build camera name lookup
+    cam_names = {}
+    if cameras:
+        for cam in cameras:
+            cam_names[str(cam.get("id", ""))] = cam.get("name", "")
     
     text = f"📋 *Últimos {len(events)} eventos*\n\n"
     for i, event in enumerate(events, 1):
         event_type = event.get("event_type", "desconhecido")
         camera_id = event.get("camera_id", "?")
+        cam_name = cam_names.get(str(camera_id), "")
+        camera_label = f"{cam_name} ({camera_id})" if cam_name else f"Câmera {camera_id}"
         timestamp = event.get("timestamp")
         
         if timestamp:
@@ -68,9 +76,9 @@ def format_events_response(events: list) -> str:
                 ts = dt.strftime("%d/%m %H:%M")
             except (ValueError, TypeError):
                 ts = str(timestamp)[:16]
-            text += f"{i}. {event_type} - Câmera {camera_id} ({ts})\n"
+            text += f"{i}. {event_type} - {camera_label} ({ts})\n"
         else:
-            text += f"{i}. {event_type} - Câmera {camera_id}\n"
+            text += f"{i}. {event_type} - {camera_label}\n"
     
     return text
 

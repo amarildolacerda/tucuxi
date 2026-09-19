@@ -80,7 +80,8 @@ def telegram_command_handler(storage, camera_manager):
         elif command == "events":
             count = int(args[0]) if args and args[0].isdigit() else 10
             events = _get_events(storage, count)
-            _send_message(chat_id, format_events_response(events))
+            cameras = camera_manager.storage.list_cameras() if hasattr(camera_manager, "storage") else []
+            _send_message(chat_id, format_events_response(events, cameras))
         
         elif command == "cameras":
             cameras = camera_manager.storage.list_cameras() if hasattr(camera_manager, "storage") else []
