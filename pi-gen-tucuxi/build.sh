@@ -2,9 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PI_GEN_DIR="${SCRIPT_DIR}/pi-gen"
 
-echo "=== Build da imagem Tucuxi Monitor ==="
+echo "=== Build da imagem Tucuxi Monitor (via Docker) ==="
 
 # Verificar pré-requisitos
 if ! command -v docker &> /dev/null; then
@@ -12,66 +11,45 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# Verificar se já é root
-if [ "$EUID" -eq 0 ]; then
-    echo "Rodando como root."
-    IS_ROOT=true
-else
-    echo "Não está rodando como root."
-    IS_ROOT=false
-    
-    # Verificar se sudo está disponível
-    if ! command -v sudo &> /dev/null; then
-        echo "ERRO: sudo não encontrado. Execute como root ou instale sudo."
-        exit 1
-    fi
-    
-    # Verificar se o usuário tem permissão de sudo
-    echo "Verificando permissões de sudo..."
-    if ! sudo -n true 2>/dev/null; then
-        echo ""
-        echo "ATENÇÃO: Você precisa de permissão de sudo para buildar a imagem."
-        echo ""
-        echo "Opções:"
-        echo "  1. Execute: sudo ./build.sh"
-        echo "  2. Ou execute: sudo -i  (depois rode ./build.sh)"
-        echo ""
-        exit 1
-    fi
+# Verificar se Docker está rodando
+if ! docker info &> /dev/null; then
+    echo "ERRO: Docker não está rodando. Inicie o Docker primeiro."
+    exit 1
 fi
 
-# Instalar dependências do pi-gen
-echo "Instalando dependências do pi-gen..."
-if [ "$IS_ROOT" = true ]; then
-    apt-get update
-    apt-get install -y quilt parted qemu-user-binfmt debootstrap zerofree zip dosfstools libarchive-tools arch-test
-else
-    sudo apt-get update
-    sudo apt-get install -y quilt parted qemu-user-binfmt debootstrap zerofree zip dosfstools libarchive-tools arch-test
-fi
+echo "Usando Docker para build (evita problemas de symlinks no WSL)..."
+echo ""
 
-# Clonar pi-gen se não existir
-if [ ! -d "$PI_GEN_DIR" ]; then
-    echo "Clonando pi-gen..."
-    git clone --depth 1 https://github.com/RPi-Distro/pi-gen.git "$PI_GEN_DIR"
-fi
+# Build via Docker
+docker run --rm --privileged \
+    -v "${SCRIPT_DIR}:/pi-gen-tucuxi" \
+    -v "${SCRIPT_DIR}/config:/config" \
+    -v "${SCRIPT_DIR}/stage3:/stage3" \
+    -v "${SCRIPT_DIR}/stage4:/stage4" \
+    -v "${SCRIPT_DIR}/stage5:/stage5" \
+    -w /pi-gen-tucuxi \
+    rpirtc/pi-gen:latest \
+    bash -c "
+        # Instalar dependências
+        apt-get update
+        apt-get install -y quilt parted qemu-user-static debootstrap zerofree zip dosfstools libarchive-tools arch-test
+        
+        # Clonar pi-gen
+        if [ ! -d pi-gen ]; then
+            git clone --depth 1 https://github.com/RPi-Distro/pi-gen.git pi-gen
+        fi
+        
+        # Copiar configurações
+        cp -r /config pi-gen/
+        cp -r /stage3 pi-gen/
+        cp -r /stage4 pi-gen/
+        cp -r /stage5 pi-gen/
+        
+        # Build
+        cd pi-gen
+        ./build.sh -c config/config
+    "
 
-# Copiar configurações
-echo "Copiando configurações customizadas..."
-cp -r "${SCRIPT_DIR}/config" "$PI_GEN_DIR/"
-cp -r "${SCRIPT_DIR}/stage3" "$PI_GEN_DIR/"
-cp -r "${SCRIPT_DIR}/stage4" "$PI_GEN_DIR/"
-cp -r "${SCRIPT_DIR}/stage5" "$PI_GEN_DIR/"
-
-# Build da imagem
-echo "Iniciando build da imagem..."
-cd "$PI_GEN_DIR"
-
-if [ "$IS_ROOT" = true ]; then
-    ./build.sh -c config/config
-else
-    sudo ./build.sh -c config/config
-fi
-
+echo ""
 echo "=== Build concluído ==="
-echo "Imagem gerada em: $PI_GEN_DIR/output/"
+echo "Imagem gerada em: ${SCRIPT_DIR}/pi-gen/output/"
