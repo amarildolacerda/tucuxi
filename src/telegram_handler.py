@@ -121,8 +121,9 @@ def _handle_snapshot(chat_id: int, camera_ref: str, camera_manager):
         _send_message(chat_id, f"Câmera não encontrada: {camera_ref}")
         return
     
-    # Get worker and capture frame
-    worker = camera_manager.get_worker(camera["id"]) if hasattr(camera_manager, "get_worker") else None
+    # Get worker from camera_manager.workers dict
+    cam_id = camera["id"]
+    worker = camera_manager.workers.get(cam_id) if hasattr(camera_manager, "workers") else None
     if not worker:
         _send_message(chat_id, format_snapshot_error("Câmera offline"))
         return
@@ -138,8 +139,8 @@ def _send_photo_from_worker(chat_id: int, worker, camera_name: str):
         return
     
     try:
-        # Get current frame from worker
-        frame = worker.get_current_frame() if hasattr(worker, "get_current_frame") else None
+        # Get latest frame from worker (returns tuple: frame, timestamp)
+        frame, _ = worker.get_latest_frame() if hasattr(worker, "get_latest_frame") else (None, None)
         if frame is None:
             _send_message(chat_id, format_snapshot_error("Não foi possível capturar frame"))
             return
@@ -165,8 +166,19 @@ def _send_photo_from_worker(chat_id: int, worker, camera_name: str):
 
 def _handle_alarm(chat_id: int, mode: str):
     """Handle alarm mode change command."""
+    # Normalize mode: accept variations like "armedhome", "armedHome", "ARMED_HOME"
+    mode_lower = mode.lower().replace(" ", "_")
+    # Map common variations
+    mode_map = {
+        "armedhome": "armed_home",
+        "armedaway": "armed_away",
+        "disarmado": "disarmed",
+        "desarmado": "disarmed",
+    }
+    normalized_mode = mode_map.get(mode_lower, mode_lower)
+    
     valid_modes = ["armed_home", "armed_away", "disarmed"]
-    if mode not in valid_modes:
+    if normalized_mode not in valid_modes:
         _send_message(chat_id, format_alarm_response(mode, success=False))
         return
     
@@ -179,13 +191,13 @@ def _handle_alarm(chat_id: int, mode: str):
         password = os.getenv("MQTT_PASSWORD")
         
         auth = {"username": username, "password": password} if username and password else None
-        payload = json.dumps({"alarm_mode": mode})
+        payload = json.dumps({"alarm_mode": normalized_mode})
         
         publish.single("tucuxi/mode/alarme/set", payload, hostname=broker, port=port, auth=auth)
-        _send_message(chat_id, format_alarm_response(mode, success=True))
+        _send_message(chat_id, format_alarm_response(normalized_mode, success=True))
     except Exception:
         logger.exception("Failed to change alarm mode")
-        _send_message(chat_id, format_alarm_response(mode, success=False))
+        _send_message(chat_id, format_alarm_response(normalized_mode, success=False))
 
 
 def _get_alarm_mode() -> str:
@@ -197,7 +209,7 @@ def _get_alarm_mode() -> str:
 def _get_last_event(storage) -> dict:
     """Get the most recent event from storage."""
     try:
-        events = storage.get_recent_events(1) if hasattr(storage, "get_recent_events") else []
+        events = storage.list_events(limit=1) if hasattr(storage, "list_events") else []
         return events[0] if events else {}
     except Exception:
         return {}
@@ -206,6 +218,6 @@ def _get_last_event(storage) -> dict:
 def _get_events(storage, count: int) -> list:
     """Get recent events from storage."""
     try:
-        return storage.get_recent_events(count) if hasattr(storage, "get_recent_events") else []
+        return storage.list_events(limit=count) if hasattr(storage, "list_events") else []
     except Exception:
         return []
