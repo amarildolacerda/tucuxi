@@ -73,9 +73,10 @@ def format_cameras_response(cameras: list) -> str:
     for cam in cameras:
         name = cam.get("name", "Sem nome")
         zone = cam.get("zone", "Sem zona")
+        cam_id = cam.get("id", "?")
         status = cam.get("status", "desconhecido")
         status_icon = "🟢" if status == "online" else "🔴"
-        text += f"{status_icon} *{name}* - {zone}\n"
+        text += f"{status_icon} *{name}* - {zone} `/snapshot {cam_id}`\n"
     
     return text
 
