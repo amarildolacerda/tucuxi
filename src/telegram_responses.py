@@ -56,7 +56,14 @@ def format_events_response(events: list) -> str:
         timestamp = event.get("timestamp")
         
         if timestamp:
-            ts = datetime.fromtimestamp(timestamp).strftime("%d/%m %H:%M")
+            try:
+                # Handle both numeric epoch and string timestamps
+                if isinstance(timestamp, (int, float)):
+                    ts = datetime.fromtimestamp(timestamp).strftime("%d/%m %H:%M")
+                else:
+                    ts = str(timestamp)[:16]  # Truncate string timestamp
+            except (ValueError, TypeError):
+                ts = str(timestamp)[:16]
             text += f"{i}. {event_type} - Câmera {camera_id} ({ts})\n"
         else:
             text += f"{i}. {event_type} - Câmera {camera_id}\n"
