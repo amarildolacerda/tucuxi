@@ -43,6 +43,8 @@ from .motion import MotionDetector
 from .geometry import bbox_center_in_polygons
 from .masking import frame_for_storage
 from .alerts import AlertService, telegram_handler, mqtt_handler, home_assistant_handler, siren_handler, mqtt_register_device, mqtt_register_predictor_entities, alarm_mode_telegram_handler, init_telegram
+from .telegram_handler import telegram_command_handler
+from .telegram_polling import start_telegram_polling
 from .app import create_app
 from .storage import EventStorage
 from .identity import IdentityRecognizer, RECOGNITION_LABELS, build_recognizer
@@ -61,6 +63,25 @@ logger = logging.getLogger(__name__)
 
 # Initialize Telegram on startup - verify bot is alive
 init_telegram()
+
+
+def _init_telegram_polling(storage, camera_manager):
+    """Initialize Telegram command polling in background thread."""
+    api_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not api_token:
+        logger.debug("Telegram polling skipped: TELEGRAM_BOT_TOKEN not configured")
+        return
+
+    handler = telegram_command_handler(storage, camera_manager)
+    stop_event = threading.Event()
+
+    poll_thread = threading.Thread(
+        target=start_telegram_polling,
+        args=(handler, 1.0, stop_event),
+        daemon=True
+    )
+    poll_thread.start()
+    logger.info("Telegram polling thread started")
 
 
 def _worker_healthy(last_frame_time, now, timeout):
@@ -772,6 +793,9 @@ def main():
 
     camera_manager = CameraManager(storage, alerts, object_detector, identity_recognizer, event_bus, sensitivity_manager, autotracker=autotracker)
     camera_manager.start()
+
+    # Initialize Telegram command polling
+    _init_telegram_polling(storage, camera_manager)
 
     # Consumidor da fila: AlertRuleEngine decide N2–N4 (persiste, alerta e
     # pede clipe). O worker apenas PRODUZ eventos N0/N1 no event_bus.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "secur"
-version = "0.2.1"
+version = "1.0.0"
 description = "Sistema de vigilância inteligente para câmeras IP com IA e alertas."
 readme = "README.md"
 requires-python = ">=3.11"

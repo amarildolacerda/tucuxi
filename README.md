@@ -60,6 +60,31 @@ Em eventos críticos — intruso, queda, permanência suspeita (loitering), muda
 - **Comando publicado** (JSON): `{"action":"siren","camera_id":1,"zone":"entrada","event_type":"intruder_detected","timestamp":123.0}`
 - **Como ligar uma sirene real:** no Home Assistant (ou qualquer cliente MQTT), crie uma automação que assina `secur/automation/siren` e, ao receber `{"action":"siren"}`, aciona o atuador (switch, script ou cena).
 
+## Comandos Telegram
+
+O bot Telegram do Tucuxi suporta comandos interativos para consulta e controle remoto:
+
+| Comando | Descrição |
+|---------|-----------|
+| `/start` | Mensagem de boas-vindas com comandos disponíveis |
+| `/status` | Resumo do sistema (câmeras, alarme, último evento) |
+| `/snapshot <id\|nome>` | Captura imagem da câmera especificada |
+| `/alarm <armed_home\|armed_away\|disarmed>` | Altera modo de alarme |
+| `/events [N]` | Lista os últimos N eventos (padrão: 5) |
+| `/cameras` | Lista todas as câmeras com status |
+| `/help` | Ajuda detalhada de todos os comandos |
+
+### Configuração
+
+Defina estas variáveis de ambiente no `.env`:
+
+```
+TELEGRAM_BOT_TOKEN=seu_token_do_bot
+TELEGRAM_CHAT_ID=seu_chat_id
+```
+
+Apenas o `TELEGRAM_CHAT_ID` configurado pode usar os comandos.
+
 ## Roadmap
 
 O que está planejado — detalhes técnicos completos em [docs/roadmap.md](docs/roadmap.md):

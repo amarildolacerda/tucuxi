@@ -1,0 +1,10 @@
+# Configuração do pi-gen para Tucuxi Monitor
+IMG_NAME='tucuxi-monitor'
+TARGET_HOSTNAME='tucuxi'
+FIRST_USER_NAME='tucuxi'
+FIRST_USER_PASS='tucuxi'
+ENABLE_SSH='1'
+PUBKEY_SSH_FIRST_USER=''
+LOCALE_DEFAULT='pt_BR.UTF-8'
+TIMEZONE_DEFAULT='America/Sao_Paulo'
+KEYBOARD_LAYOUT='br'

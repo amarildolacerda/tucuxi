@@ -39,11 +39,12 @@ Fornecer orientações claras sobre como dividir tarefas entre agentes de projet
 
 ## Fluxo de branches e release
 
-- Código deve ser integrado em `dev` via pull request.
+**Resumo:** alterações de código só no `dev`. Produção (`main`) recebe via `dev`, nunca via alteração direta.
+
+- Código deve ser integrado em `dev` (ou branch de feature).
+- `main` só recebe merge via PR + tag de release.
 - Não aplique alterações de código diretamente em `main`.
-- Para mover mudanças para produção, crie uma nova versão com tag baseada em `main`.
-- Use o formato de tag `v0.0.0` para a primeira versão e incremente conforme necessário.
-- Apenas a branch `main` deve conter código já liberado para produção.
+- Use o formato de tag `v0.0.0` (semver) para releases.
 
 ### Verificação obrigatória de branch (anti-push-direto-no-main)
 
