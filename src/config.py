@@ -20,7 +20,7 @@ DB_PATH = DATA_DIR / "events.db"
 # Versão da release. Bump a cada release (formato vX.Y.Z, ver AGENTS.md).
 # Fonte única: exibida no footer do dashboard e usada como sw_version no HA
 # (antes era hardcoded "0.2.0" e ficava defasada em relação às tags).
-APP_VERSION = "0.8.1"
+APP_VERSION = "1.0.0"
 
 DEFAULT_CAMERAS = [
     {
