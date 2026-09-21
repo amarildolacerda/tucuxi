@@ -10,6 +10,7 @@ async function renderSettings() {
   } catch (e) { /* offline: mantém estado atual */ }
   renderSettingsConfig();
   renderSensitivityConfig();
+  renderRebootCard();
 }
 
 function appendConfigValue(dd, v) {
@@ -138,20 +139,25 @@ function setupSettings() {
     });
   }
   const toggle = document.getElementById('privacy-mode-toggle');
-  if (!toggle) return;
-  toggle.addEventListener('change', async () => {
-    const res = await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ privacy_mode: toggle.checked }),
+  if (toggle) {
+    toggle.addEventListener('change', async () => {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ privacy_mode: toggle.checked }),
+      });
+      if (!res.ok) {
+        toggle.checked = !toggle.checked;
+        showMenuMessage('Falha ao salvar configuração.', 'camera-form-message');
+      } else {
+        invalidateCache('/api/settings');
+      }
     });
-    if (!res.ok) {
-      toggle.checked = !toggle.checked;
-      showMenuMessage('Falha ao salvar configuração.', 'camera-form-message');
-    } else {
-      invalidateCache('/api/settings');
-    }
-  });
+  }
+  const rebootBtn = document.getElementById('reboot-pi-btn');
+  if (rebootBtn) {
+    rebootBtn.addEventListener('click', handleReboot);
+  }
 }
 
 const LEVEL_LABELS = { default: 'Padrão', low: 'Baixa', medium: 'Média', high: 'Alta' };
@@ -229,6 +235,40 @@ async function selectLevel(cameraId, level, camDiv) {
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     if (desc) desc.textContent = `Erro: ${err.error || 'falha ao salvar'}`;
+  }
+}
+
+async function renderRebootCard() {
+  try {
+    const resp = await fetch('/api/auth/me');
+    const me = await resp.json();
+    if (!me.permissions?.manage_settings) return;
+    const card = document.getElementById('reboot-system-card');
+    if (card) card.style.display = '';
+  } catch (e) {
+    // silently hide if we can't check permissions
+  }
+}
+
+async function handleReboot() {
+  const msg = document.getElementById('reboot-message');
+  const btn = document.getElementById('reboot-pi-btn');
+  if (!confirm('Tem certeza que deseja reiniciar o Pi? O sistema ficará indisponível por alguns minutos.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Reiniciando...';
+  if (msg) msg.textContent = 'Enviando comando de reinicialização...';
+  try {
+    const resp = await fetch('/api/system/reboot', { method: 'POST' });
+    const data = await resp.json();
+    if (data.ok) {
+      if (msg) msg.textContent = 'Reiniciando o Pi... A página perderá a conexão em alguns segundos.';
+    } else {
+      if (msg) msg.textContent = 'Erro: ' + (data.error || 'falha ao reiniciar');
+      btn.disabled = false;
+      btn.textContent = 'Reiniciar';
+    }
+  } catch (e) {
+    if (msg) msg.textContent = 'Reiniciando o Pi... A página perderá a conexão em alguns segundos.';
   }
 }
 

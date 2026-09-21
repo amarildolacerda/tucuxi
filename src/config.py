@@ -88,10 +88,10 @@ MQTT_BROKER_URL = os.getenv("MQTT_BROKER_URL", "192.168.1.12")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME", "kzuca")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "123")
-MQTT_TOPIC = os.getenv("MQTT_TOPIC", "homeassistant/secur/alert")
+MQTT_TOPIC = os.getenv("MQTT_TOPIC", "tucuxi/alert")
 
 # Sirene / atuação externa (Fase 5.1): aciona dispositivo em evento crítico via MQTT
-SIREN_MQTT_TOPIC = os.getenv("SIREN_MQTT_TOPIC", "secur/automation/siren")
+SIREN_MQTT_TOPIC = os.getenv("SIREN_MQTT_TOPIC", "tucuxi/automation/siren")
 SIREN_EVENT_TYPES = {
     t.strip()
     for t in os.getenv(

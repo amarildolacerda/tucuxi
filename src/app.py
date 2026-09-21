@@ -1477,4 +1477,15 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         prune_thread.start()
         logger.info("Auto-prune scheduler iniciado (intervalo=%ds)", cfg.EVENT_PRUNE_INTERVAL_SECONDS)
 
+    # ── System reboot ──────────────────────────────────────────────
+    @app.route("/api/system/reboot", methods=["POST"])
+    @require_permission("manage_settings")
+    def system_reboot():
+        import subprocess, threading, time
+        def do_reboot():
+            time.sleep(1)
+            subprocess.run(["sudo", "/sbin/reboot"], check=False)
+        threading.Thread(target=do_reboot, daemon=True).start()
+        return jsonify({"ok": True, "message": "Reiniciando o Pi..."})
+
     return app
