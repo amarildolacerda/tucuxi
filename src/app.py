@@ -1488,4 +1488,28 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         threading.Thread(target=do_reboot, daemon=True).start()
         return jsonify({"ok": True, "message": "Reiniciando o Pi..."})
 
+    # ── OTA Update ────────────────────────────────────────────────
+    from .update import UpdateManager
+    _update_manager = UpdateManager()
+
+    @app.route("/api/system/update-check", methods=["GET"])
+    @require_permission("manage_settings")
+    def update_check():
+        _update_manager.check_for_update()
+        return jsonify(_update_manager.get_status())
+
+    @app.route("/api/system/update", methods=["POST"])
+    @require_permission("manage_settings")
+    def update_apply():
+        data = request.get_json(silent=True) or {}
+        tag = data.get("tag")
+        if not tag:
+            return jsonify({"error": "tag é obrigatório"}), 400
+        success, log = _update_manager.apply_update(tag)
+        return jsonify({
+            "success": success,
+            "message": "Atualizado com sucesso" if success else "Falha ao atualizar",
+            "log": log,
+        }), 200 if success else 500
+
     return app

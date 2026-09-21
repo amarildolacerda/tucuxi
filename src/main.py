@@ -214,7 +214,7 @@ class CameraWorker:
             if not ok:
                 return None
             path.write_bytes(jpg.tobytes())
-            self.storage.add_camera_thumbnail(self.camera["id"], str(path), event_type, event_id=event_id)
+            self.storage.add_camera_thumbnail(self.camera["id"], str(path), event_type, event_id=event_id, timestamp=now)
             self.storage.prune_camera_thumbnails(self.camera["id"], keep=keep, max_age_days=days)
         except Exception:
             logger.warning("Falha ao capturar thumbnail (câmera %s)", self.camera.get("name"))
@@ -961,4 +961,22 @@ def main():
     ])
 
     app = create_app(camera_manager=camera_manager, alerts=alerts, event_bus=event_bus)
+
+    # Update checker: check on startup + every 24h
+    from .update import UpdateManager, CHECK_INTERVAL
+    update_mgr = UpdateManager()
+    update_stop_event = threading.Event()
+
+    def _update_timer():
+        while not update_stop_event.is_set():
+            try:
+                update_mgr.check_for_update()
+            except Exception:
+                logger.exception("Update check failed")
+            update_stop_event.wait(CHECK_INTERVAL)
+
+    update_thread = threading.Thread(target=_update_timer, daemon=True, name="update-checker")
+    update_thread.start()
+    logger.info("Update checker iniciado (intervalo=%ds)", CHECK_INTERVAL)
+
     app.run(host=SERVER_HOST, port=SERVER_PORT, debug=True, use_reloader=False)

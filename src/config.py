@@ -22,6 +22,9 @@ DB_PATH = DATA_DIR / "events.db"
 # (antes era hardcoded "0.2.0" e ficava defasada em relação às tags).
 APP_VERSION = "1.0.0"
 
+# GitHub repo for OTA updates (owner/repo format)
+GITHUB_REPO_SLUG = os.getenv("GITHUB_REPO_SLUG", "amarildolacerda/tucuxi")
+
 DEFAULT_CAMERAS = [
     {
         "name": "Camera 1",

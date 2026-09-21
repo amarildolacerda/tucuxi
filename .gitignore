@@ -9,3 +9,8 @@ data/
 
 # deepwork state (git-local)
 .slim/deepwork/
+
+# node/JS (opencode plugins)
+node_modules/
+package.json
+package-lock.json

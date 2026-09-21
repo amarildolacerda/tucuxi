@@ -108,6 +108,19 @@ async function bootDashboard() {
   setupSidebarNavigation();
   startFooter();
   await loadSection('overview'); // única seção carregada no boot
+
+  // Check for updates and show banner
+  fetch('/api/system/update-check')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (data && data.update_available) {
+        const banner = document.createElement('div');
+        banner.className = 'update-banner';
+        banner.innerHTML = `Nova versão disponível: <strong>${data.latest_version}</strong> — <a href="/?section=settings">Atualizar</a>`;
+        document.body.prepend(banner);
+      }
+    })
+    .catch(() => {}); // Silent fail for update check
 }
 
 window.addEventListener('DOMContentLoaded', bootDashboard);
