@@ -63,10 +63,10 @@ class PredictorLoop:
                 return
             # Alarme switch: ON if armed_home, OFF if disarmed
             alarme_state = "ON" if mode == "armed_home" else "OFF"
-            client.publish("tucuxi/mode/alarme/state", alarme_state, retain=True)
+            client.publish("tucuxi/alarm/state", alarme_state, retain=True)
             # Viagem switch: ON if armed_away, OFF otherwise
             viagem_state = "ON" if mode == "armed_away" else "OFF"
-            client.publish("tucuxi/mode/viagem/state", viagem_state, retain=True)
+            client.publish("tucuxi/alarm/viagem/state", viagem_state, retain=True)
         except Exception:
             pass
         finally:

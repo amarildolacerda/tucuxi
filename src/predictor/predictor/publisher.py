@@ -18,7 +18,7 @@ def build_prediction_payload(camera: str, zone: str, janela: str, evento_previst
 
 
 def publish_prediction(broker: str, port: int, auth: dict | None, slug: str, payload: dict) -> None:
-    publish.single(f"tucuxi/predictions/{topic_slug(slug)}", json.dumps(payload),
+    publish.single(f"tucuxi/camera/{topic_slug(slug)}/prediction", json.dumps(payload),
                    hostname=broker, port=port, auth=auth, retain=True, qos=0)
 
 
@@ -26,10 +26,10 @@ def build_discovery_config(slug: str, expire_after_sec: int = 1800) -> dict:
     safe = topic_slug(slug)
     return {
         "name": f"Tucuxi {slug} Predicao",
-        "state_topic": f"tucuxi/predictions/{safe}",
+        "state_topic": f"tucuxi/camera/{safe}/prediction",
         "value_template": "{{ value_json.probabilidade }}",
         "unit_of_measurement": "%",
-        "json_attributes_topic": f"tucuxi/predictions/{safe}",
+        "json_attributes_topic": f"tucuxi/camera/{safe}/prediction",
         "expire_after": expire_after_sec,
         "unique_id": f"tucuxi_{safe}_prediction",
     }
