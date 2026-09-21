@@ -466,7 +466,7 @@ def mqtt_register_device(cameras):
             # Motion binary_sensor (payloads padrão do HA: ON/OFF)
             motion_config = {
                 "name": f"{cam_name} Motion",
-                "state_topic": f"tucuxi/{safe_id}/state",
+                "state_topic": f"tucuxi/camera/{safe_id}/state",
                 "payload_on": "ON",
                 "payload_off": "OFF",
                 "device_class": "motion",
@@ -483,9 +483,9 @@ def mqtt_register_device(cameras):
             # Alert sensor
             alert_config = {
                 "name": f"{cam_name} Alert",
-                "state_topic": f"tucuxi/{safe_id}/alert_state",
+                "state_topic": f"tucuxi/camera/{safe_id}/alert_state",
                 "value_template": "{{ value_json.event_type }}",
-                "json_attributes_topic": f"tucuxi/{safe_id}/alert",
+                "json_attributes_topic": f"tucuxi/camera/{safe_id}/alert",
                 "unique_id": f"{safe_id}_alert",
                 "device": device,
             }
@@ -499,7 +499,7 @@ def mqtt_register_device(cameras):
             # Snapshot camera entity
             snapshot_config = {
                 "name": f"{cam_name} Snapshot",
-                "state_topic": f"tucuxi/{safe_id}/snapshot",
+                "state_topic": f"tucuxi/camera/{safe_id}/snapshot",
                 "unique_id": f"{safe_id}_snapshot",
                 "device": device,
             }
@@ -514,8 +514,8 @@ def mqtt_register_device(cameras):
             client.publish(f"homeassistant/binary_sensor/{safe_id}_alert/config", "", qos=1, retain=True)
 
             # Publish initial states so HA doesn't show "unknown"
-            client.publish(f"tucuxi/{safe_id}/state", "OFF", qos=1, retain=True)
-            client.publish(f"tucuxi/{safe_id}/alert_state",
+            client.publish(f"tucuxi/camera/{safe_id}/state", "OFF", qos=1, retain=True)
+            client.publish(f"tucuxi/camera/{safe_id}/alert_state",
                            json.dumps({"event_type": "none", "camera_id": cam_id}),
                            qos=1, retain=True)
 
