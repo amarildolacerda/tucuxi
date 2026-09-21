@@ -164,7 +164,7 @@ function fetchSnapshotTime(cameraId, srcUrl) {
 
 async function fetchSnapshotWithHeader(cameraId, url) {
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(url, { cache: 'no-store' });
     const img = document.getElementById(`snapshot-${cameraId}`);
     if (!resp.ok) { if (img) onSnapshotError(cameraId, img); return; }
     const ts = resp.headers.get('X-Snapshot-Time');
@@ -247,7 +247,8 @@ const snapshotObserver = new IntersectionObserver((entries) => {
       wrapper.classList.add('in-viewport');
       if (img && !img.dataset.loaded) {
         img.dataset.loaded = '1';
-        img.src = `/camera/${wrapper.dataset.cameraId}/snapshot?ts=${Date.now()}`;
+        img.dataset.loading = '1';
+        fetchSnapshotWithHeader(wrapper.dataset.cameraId, `/camera/${wrapper.dataset.cameraId}/snapshot?ts=${Date.now()}`);
       }
     } else {
       wrapper.classList.remove('in-viewport');
@@ -269,7 +270,7 @@ function refreshSnapshot(cameraId, force = false) {
   const ts = snapshotTimes[String(cameraId)];
   if (!force && ts && (Date.now() - new Date(ts).getTime()) < SNAPSHOT_MAX_AGE_MS) return;
   img.dataset.loading = '1';
-  img.src = `/camera/${cameraId}/snapshot?ts=${Date.now()}`;
+  fetchSnapshotWithHeader(cameraId, `/camera/${cameraId}/snapshot?ts=${Date.now()}`);
 }
 
 function updateVisibleSnapshots(cameras) {
@@ -579,7 +580,8 @@ async function pollCardPTZIdle(cameraId, intervalMs = 200, maxWaitMs = 5000) {
 function refreshCardSnapshot(cameraId) {
   const img = document.getElementById(`snapshot-${cameraId}`);
   if (img) {
-    img.src = `/camera/${cameraId}/snapshot?ts=${Date.now()}`;
+    img.dataset.loading = '1';
+    fetchSnapshotWithHeader(cameraId, `/camera/${cameraId}/snapshot?ts=${Date.now()}`);
   }
 }
 
