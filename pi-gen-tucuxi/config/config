@@ -1,4 +1,5 @@
 # Configuração do pi-gen para Tucuxi Monitor
+# Imagem Lite (sem desktop) - apenas sistema mínimo + Docker
 IMG_NAME='tucuxi-monitor'
 TARGET_HOSTNAME='tucuxi'
 FIRST_USER_NAME='tucuxi'
@@ -8,3 +9,10 @@ PUBKEY_SSH_FIRST_USER=''
 LOCALE_DEFAULT='pt_BR.UTF-8'
 TIMEZONE_DEFAULT='America/Sao_Paulo'
 KEYBOARD_LAYOUT='br'
+
+# Pular stages desnecessários (desktop, dev tools, etc)
+# Stage 3: desktop base - PULAR
+# Stage 4: desktop - PULAR
+# Stage 5: desktop full - PULAR
+# Manter apenas Stage 0-2 (sistema base + lite)
+SKIP_STAGES="3 4 5"

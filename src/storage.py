@@ -387,14 +387,17 @@ class EventStorage:
                     cursor.execute(ddl)
             self.connection.commit()
 
-    def add_event(self, camera_id, zone, event_type, details=None, level=0, source="local", dropped=False):
-        timestamp = datetime.now(timezone.utc).isoformat()
+    def add_event(self, camera_id, zone, event_type, details=None, level=0, source="local", dropped=False, timestamp=None):
+        if timestamp is not None:
+            ts = datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+        else:
+            ts = datetime.now(timezone.utc).isoformat()
         with self.lock:
             cursor = self.connection.cursor()
             cursor.execute(
                 "INSERT INTO events (timestamp, camera_id, zone, event_type, details, level, dropped, source) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (timestamp, camera_id, zone, event_type, details, level, 1 if dropped else 0, source),
+                (ts, camera_id, zone, event_type, details, level, 1 if dropped else 0, source),
             )
             self.connection.commit()
             return cursor.lastrowid
@@ -795,16 +798,30 @@ class EventStorage:
             self.connection.commit()
             return cursor.rowcount > 0
 
-    def add_camera_thumbnail(self, camera_id: int, path: str, event_type: str, event_id: str = None) -> int:
-        timestamp = datetime.now(timezone.utc).isoformat()
+    def add_camera_thumbnail(self, camera_id: int, path: str, event_type: str, event_id: str = None, timestamp: float = None) -> int:
+        if timestamp is not None:
+            ts = datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+        else:
+            ts = datetime.now(timezone.utc).isoformat()
         with self.lock:
             cursor = self.connection.cursor()
             cursor.execute(
                 "INSERT INTO camera_thumbnails (camera_id, timestamp, event_type, path, event_id) VALUES (?, ?, ?, ?, ?)",
-                (camera_id, timestamp, event_type, path, event_id),
+                (camera_id, ts, event_type, path, event_id),
             )
             self.connection.commit()
             return cursor.lastrowid
+
+    def update_thumbnail_event_id(self, camera_id: int, old_event_id: str, new_event_id: str) -> bool:
+        """Atualiza o event_id de um thumbnail (UUID → ID do BD) para o JOIN funcionar."""
+        with self.lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "UPDATE camera_thumbnails SET event_id = ? WHERE camera_id = ? AND event_id = ?",
+                (new_event_id, camera_id, old_event_id),
+            )
+            self.connection.commit()
+            return cursor.rowcount > 0
 
     def list_camera_thumbnails(self, camera_id: int, limit: int = 20):
         with self.lock:

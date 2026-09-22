@@ -203,7 +203,7 @@ def _handle_alarm(chat_id: int, mode: str):
         auth = {"username": username, "password": password} if username and password else None
         payload = json.dumps({"alarm_mode": normalized_mode})
         
-        publish.single("tucuxi/mode/alarme/set", payload, hostname=broker, port=port, auth=auth)
+        publish.single("tucuxi/alarm/set", payload, hostname=broker, port=port, auth=auth)
         _send_message(chat_id, format_alarm_response(normalized_mode, success=True))
     except Exception:
         logger.exception("Failed to change alarm mode")

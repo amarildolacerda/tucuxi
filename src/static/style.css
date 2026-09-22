@@ -2214,3 +2214,20 @@ tr.event-info td {
     padding-top: 1rem;
     margin-top: 1rem;
 }
+
+/* ── Update Banner ── */
+.update-banner {
+    background: var(--warn);
+    color: #000;
+    padding: 0.5rem 1rem;
+    text-align: center;
+    font-size: 0.9rem;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+.update-banner a {
+    color: #000;
+    font-weight: bold;
+    text-decoration: underline;
+}

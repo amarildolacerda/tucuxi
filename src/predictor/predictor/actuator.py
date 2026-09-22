@@ -12,7 +12,8 @@ ARMED_MODES = ("armed_home", "armed_away")
 def decide_action(slug: str, alarm_mode: str, event_type: str, entity_map: dict,
                   inhibitors: dict | None = None,
                   last_trigger_ts: float | None = None,
-                  now_ts: float = 0.0, motivo: str = "") -> dict | None:
+                  now_ts: float = 0.0, motivo: str = "",
+                  camera_name: str = "") -> dict | None:
     entry = resolve_zone(slug, entity_map)
     if entry is None:
         return None
@@ -28,7 +29,7 @@ def decide_action(slug: str, alarm_mode: str, event_type: str, entity_map: dict,
         return None
     return ActuatorCommand(
         action="turn_on",
-        camera=slug,
+        camera=camera_name or slug,
         zone=slug,
         event_type=event_type,
         target_entity=entry["ha_actuator"],

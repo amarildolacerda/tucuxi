@@ -84,6 +84,35 @@ regra (ver `.git/hooks/pre-push`), mas não substitui a verificação acima.
 - Forms: `label` com `var(--muted-subtle)`, `input/select` com `border-radius: var(--radius-sm)`.
 - Validar CSS contra o skill guide antes de commit (sem lixo, sem duplicações).
 
+## Padrões de tópicos MQTT (OBRIGATÓRIO)
+
+Todos os tópicos MQTT do Tucuxi devem seguir o padrão `tucuxi/[tipo]/[nome]/[propriedade]`:
+
+### Câmeras: `tucuxi/camera/{slug}/#`
+- `tucuxi/camera/{slug}/state` — estado ON/OFF (movimento)
+- `tucuxi/camera/{slug}/event` — eventos enriquecidos
+- `tucuxi/camera/{slug}/alert` — payload do alerta
+- `tucuxi/camera/{slug}/alert_state` — estado do alerta
+- `tucuxi/camera/{slug}/snapshot` — thumbnail da câmera
+- `tucuxi/camera/{slug}/prediction` — previsão do predictor
+
+### Alarme: `tucuxi/alarm/#`
+- `tucuxi/alarm/mode` — modo atual (armed_home, armed_away, disarmed)
+- `tucuxi/alarm/set` — comando para alterar alarme
+- `tucuxi/alarm/state` — estado do switch alarme
+- `tucuxi/alarm/viagem/set` — comando viagem
+- `tucuxi/alarm/viagem/state` — estado switch viagem
+
+### Automação: `tucuxi/automation/#`
+- `tucuxi/automation/actuator` — comandos de atuador
+- `tucuxi/automation/siren` — sirene
+
+### Regras
+- `{slug}` = `topic_slug(nome)` — lowercase, sem acentos, só `[a-z0-9_]`
+- Nunca usar `secur/`, `secur_cam*`, `tucuxi/ha/`, `tucuxi/mode/`, `tucuxi/predictions/`
+- HA discovery configs: `homeassistant/{tipo}/tucuxi_{slug}_*/config`
+- device name/manufacturer: `Tucuxi` (não `Secur`)
+
 ## Padrões relevantes para Secur
 
 - Dividir a lógica de captura de câmeras e inferência de IA em componentes separados.

@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 
 from . import ha_client
 from .actuator import decide_action, publish_actuator
-from .entity_map import DEFAULT_ENTITY_MAP, load_entity_map
+from .entity_map import DEFAULT_ENTITY_MAP, load_entity_map, resolve_zone
+from ...utils import topic_slug
 from .ewma import EWMAModel
 from .publisher import build_prediction_payload, publish_prediction
 
@@ -62,10 +63,10 @@ class PredictorLoop:
                 return
             # Alarme switch: ON if armed_home, OFF if disarmed
             alarme_state = "ON" if mode == "armed_home" else "OFF"
-            client.publish("tucuxi/mode/alarme/state", alarme_state, retain=True)
+            client.publish("tucuxi/alarm/state", alarme_state, retain=True)
             # Viagem switch: ON if armed_away, OFF otherwise
             viagem_state = "ON" if mode == "armed_away" else "OFF"
-            client.publish("tucuxi/mode/viagem/state", viagem_state, retain=True)
+            client.publish("tucuxi/alarm/viagem/state", viagem_state, retain=True)
         except Exception:
             pass
         finally:
@@ -89,6 +90,7 @@ class PredictorLoop:
     def on_event(self, event, now_ts: float | None = None) -> dict | None:
         now = time.time() if now_ts is None else now_ts
         slug = str(getattr(event, "zone", None) or getattr(event, "camera_id", ""))
+        camera_name = str(getattr(event, "camera", "") or getattr(event, "camera_name", "") or slug)
         if slug in self.models:
             try:
                 hour = datetime.now().astimezone().hour
@@ -103,7 +105,7 @@ class PredictorLoop:
                   f"({self.samples.get(slug, 0)} eventos em {history_days} dias)")
         cmd = decide_action(slug, mode, event_label,
                             self.entity_map, {}, self.last_trigger.get(slug), now,
-                            motivo=motivo)
+                            motivo=motivo, camera_name=camera_name)
         if cmd is None:
             return None
         self.last_trigger[slug] = now
@@ -116,13 +118,15 @@ class PredictorLoop:
         for slug, model in self.models.items():
             if self.samples.get(slug, 0) == 0:
                 continue
+            entry = resolve_zone(slug, self.entity_map)
+            camera_name = topic_slug(entry.get("camera_id") or slug if entry else slug)
             prob = round(min(1.0, model.predict(now_hour) / 10.0), 3)
             janela = f"{now_hour:02d}:00-{(now_hour + 1) % 24:02d}:00"
             expira = (datetime.now().astimezone().replace(minute=0, second=0, microsecond=0)
                       + timedelta(hours=1)).isoformat(timespec="seconds")
-            payload = build_prediction_payload(slug, slug, janela, "pessoa", prob, 0.5,
+            payload = build_prediction_payload(camera_name, slug, janela, "pessoa", prob, 0.5,
                                                self.samples.get(slug, 0), expira)
             payloads.append(payload)
             if self.publish:
-                publish_prediction(self.broker, self.port, self.auth, slug, payload)
+                publish_prediction(self.broker, self.port, self.auth, camera_name, payload)
         return payloads

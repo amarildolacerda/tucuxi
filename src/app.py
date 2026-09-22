@@ -1477,4 +1477,39 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         prune_thread.start()
         logger.info("Auto-prune scheduler iniciado (intervalo=%ds)", cfg.EVENT_PRUNE_INTERVAL_SECONDS)
 
+    # ── System reboot ──────────────────────────────────────────────
+    @app.route("/api/system/reboot", methods=["POST"])
+    @require_permission("manage_settings")
+    def system_reboot():
+        import subprocess, threading, time
+        def do_reboot():
+            time.sleep(1)
+            subprocess.run(["sudo", "/sbin/reboot"], check=False)
+        threading.Thread(target=do_reboot, daemon=True).start()
+        return jsonify({"ok": True, "message": "Reiniciando o Pi..."})
+
+    # ── OTA Update ────────────────────────────────────────────────
+    from .update import UpdateManager
+    _update_manager = UpdateManager()
+
+    @app.route("/api/system/update-check", methods=["GET"])
+    @require_permission("manage_settings")
+    def update_check():
+        _update_manager.check_for_update()
+        return jsonify(_update_manager.get_status())
+
+    @app.route("/api/system/update", methods=["POST"])
+    @require_permission("manage_settings")
+    def update_apply():
+        data = request.get_json(silent=True) or {}
+        tag = data.get("tag")
+        if not tag:
+            return jsonify({"error": "tag é obrigatório"}), 400
+        success, log = _update_manager.apply_update(tag)
+        return jsonify({
+            "success": success,
+            "message": "Atualizado com sucesso" if success else "Falha ao atualizar",
+            "log": log,
+        }), 200 if success else 500
+
     return app

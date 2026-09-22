@@ -214,7 +214,7 @@ class CameraWorker:
             if not ok:
                 return None
             path.write_bytes(jpg.tobytes())
-            self.storage.add_camera_thumbnail(self.camera["id"], str(path), event_type, event_id=event_id)
+            self.storage.add_camera_thumbnail(self.camera["id"], str(path), event_type, event_id=event_id, timestamp=now)
             self.storage.prune_camera_thumbnails(self.camera["id"], keep=keep, max_age_days=days)
         except Exception:
             logger.warning("Falha ao capturar thumbnail (câmera %s)", self.camera.get("name"))
@@ -846,7 +846,7 @@ def main():
                         from .alerts import alarm_mode_telegram_handler
                         alarm_mode_telegram_handler(payload)
                     # Publish to Alarm Mode sensor topic so HA updates
-                    client.publish("tucuxi/ha/alarm_mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
+                    client.publish("tucuxi/alarm/mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
             except Exception:
                 pass
 
@@ -859,11 +859,11 @@ def main():
                 # Track alarme switch state
                 _predictor._alarme_on = (payload == "ON")
                 # Publish alarme state back so HA switch reflects it
-                client.publish("tucuxi/mode/alarme/state", payload, qos=1, retain=True)
+                client.publish("tucuxi/alarm/state", payload, qos=1, retain=True)
                 # Alarme OFF = turn off viagem too
                 if not _predictor._alarme_on:
                     _predictor._viagem_on = False
-                    client.publish("tucuxi/mode/viagem/state", "OFF", qos=1, retain=True)
+                    client.publish("tucuxi/alarm/viagem/state", "OFF", qos=1, retain=True)
                 # Derive alarm mode from both switches
                 alarme_on = _predictor._alarme_on
                 viagem_on = _predictor._viagem_on
@@ -875,7 +875,7 @@ def main():
                     mode = "disarmed"
                 if mode in _hc.VALID_MODES:
                     _predictor.set_alarm_mode(mode, "")
-                    client.publish("tucuxi/ha/alarm_mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
+                    client.publish("tucuxi/alarm/mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
                     alarm_mode_telegram_handler({"alarm_mode": mode})
                     logger.info("Alarm mode updated to %s (alarme=%s, viagem=%s)", mode, alarme_on, viagem_on)
             except Exception as e:
@@ -890,7 +890,7 @@ def main():
                 # Track viagem switch state
                 _predictor._viagem_on = (payload == "ON")
                 # Publish viagem state back so HA switch reflects it
-                client.publish("tucuxi/mode/viagem/state", payload, qos=1, retain=True)
+                client.publish("tucuxi/alarm/viagem/state", payload, qos=1, retain=True)
                 # Derive alarm mode from both switches
                 alarme_on = _predictor._alarme_on
                 viagem_on = _predictor._viagem_on
@@ -902,23 +902,23 @@ def main():
                     mode = "disarmed"
                 if mode in _hc.VALID_MODES:
                     _predictor.set_alarm_mode(mode, "")
-                    client.publish("tucuxi/ha/alarm_mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
+                    client.publish("tucuxi/alarm/mode", _json.dumps({"alarm_mode": mode}), qos=1, retain=True)
                     alarm_mode_telegram_handler({"alarm_mode": mode})
                     logger.info("Alarm mode updated to %s (alarme=%s, viagem=%s)", mode, alarme_on, viagem_on)
             except Exception as e:
                 logger.exception("Error in _on_viagem_set_msg")
 
         _mqtt_client_sub.on_message = _on_alarm_msg
-        _mqtt_client_sub.message_callback_add("tucuxi/mode/alarme/set", _on_alarme_set_msg)
-        _mqtt_client_sub.message_callback_add("tucuxi/mode/viagem/set", _on_viagem_set_msg)
+        _mqtt_client_sub.message_callback_add("tucuxi/alarm/set", _on_alarme_set_msg)
+        _mqtt_client_sub.message_callback_add("tucuxi/alarm/viagem/set", _on_viagem_set_msg)
 
         # Skip first alarm_mode message (startup sync) to avoid duplicate Telegram notification
         _alarm_msg_first = [True]
         def _on_sub_connect(client, userdata, flags, rc):
             if rc == 0:
                 logger.info("Predictor MQTT connected (rc=%s), subscribing...", rc)
-                client.subscribe("tucuxi/mode/alarme/set")
-                client.subscribe("tucuxi/mode/viagem/set")
+                client.subscribe("tucuxi/alarm/set")
+                client.subscribe("tucuxi/alarm/viagem/set")
                 logger.info("Predictor MQTT subscriptions active")
             else:
                 logger.error("Predictor MQTT connect failed rc=%s", rc)
@@ -961,4 +961,22 @@ def main():
     ])
 
     app = create_app(camera_manager=camera_manager, alerts=alerts, event_bus=event_bus)
+
+    # Update checker: check on startup + every 24h
+    from .update import UpdateManager, CHECK_INTERVAL
+    update_mgr = UpdateManager()
+    update_stop_event = threading.Event()
+
+    def _update_timer():
+        while not update_stop_event.is_set():
+            try:
+                update_mgr.check_for_update()
+            except Exception:
+                logger.exception("Update check failed")
+            update_stop_event.wait(CHECK_INTERVAL)
+
+    update_thread = threading.Thread(target=_update_timer, daemon=True, name="update-checker")
+    update_thread.start()
+    logger.info("Update checker iniciado (intervalo=%ds)", CHECK_INTERVAL)
+
     app.run(host=SERVER_HOST, port=SERVER_PORT, debug=True, use_reloader=False)

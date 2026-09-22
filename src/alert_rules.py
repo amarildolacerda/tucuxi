@@ -23,8 +23,15 @@ class AlertRuleEngine:
         event_id = self.storage.add_event(
             event.camera_id, event.zone, stored_type, event.details,
             level=event.level, source=event.source, dropped=event.dropped,
+            timestamp=event.timestamp,
         )
         event.db_event_id = event_id
+
+        # Atualiza o event_id do thumbnail: salva com UUID, agora liga ao ID do BD
+        if hasattr(event, 'event_id') and hasattr(event, 'camera_id'):
+            self.storage.update_thumbnail_event_id(
+                event.camera_id, event.event_id, str(event_id),
+            )
         if event.dropped:
             return
 

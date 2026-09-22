@@ -22,6 +22,34 @@
         </button>
         <div id="settings-config" class="hidden-panel" style="margin-top:12px;"></div>
     </div>
+    <div class="card" id="reboot-system-card" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <div>
+                <strong>Reiniciar Pi</strong>
+                <p style="color:var(--muted-subtle);font-size:0.85rem;margin:4px 0 0;">
+                    Reinicia o Raspberry Pi. O sistema ficará indisponível por alguns minutos.
+                </p>
+            </div>
+            <button type="button" class="button-mini" id="reboot-pi-btn" style="background:var(--danger);color:#fff;">Reiniciar</button>
+        </div>
+        <div id="reboot-message" style="margin-top:8px;font-size:0.85rem;"></div>
+    </div>
+    <!-- Atualização -->
+    <div class="card" id="update-system-card">
+        <h3>Atualização do Sistema</h3>
+        <div id="update-status">
+            <p style="color:var(--muted-subtle);">Verificando atualizações...</p>
+        </div>
+        <div id="update-actions" style="display:none;margin-top:8px;">
+            <button id="btn-check-update" class="button-secondary button-mini">Verificar agora</button>
+            <button id="btn-apply-update" class="button-mini" style="display:none;background:var(--primary);color:#fff;margin-left:8px;">Atualizar</button>
+        </div>
+        <div id="update-progress" style="display:none;margin-top:8px;">
+            <p id="update-progress-text" style="color:var(--warning);">Atualizando...</p>
+            <pre id="update-log" style="background:var(--surface-2);padding:0.5rem;border-radius:var(--radius-sm);font-size:0.8rem;max-height:200px;overflow-y:auto;"></pre>
+        </div>
+        <div id="update-result" style="display:none;margin-top:8px;"></div>
+    </div>
     <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
             <div>

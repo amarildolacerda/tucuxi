@@ -7,6 +7,7 @@ import paho.mqtt.publish as publish
 
 from .notifications import is_enabled
 from .config import APP_VERSION, SIREN_MQTT_TOPIC, SIREN_EVENT_TYPES
+from .utils import topic_slug
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +176,7 @@ def mqtt_handler(payload: Dict):
     port = int(os.getenv("MQTT_BROKER_PORT", "1883"))
     username = os.getenv("MQTT_USERNAME", "kzuca")
     password = os.getenv("MQTT_PASSWORD", "123")
-    topic = os.getenv("MQTT_TOPIC", "homeassistant/secur/alert")
+    topic = os.getenv("MQTT_TOPIC", "tucuxi/alert")
 
     if not broker:
         logger.debug("MQTT handler skipped: MQTT_BROKER_URL not configured")
@@ -189,14 +190,15 @@ def mqtt_handler(payload: Dict):
         if os.getenv("MQTT_TOPIC"):
             # Per-camera state for HA auto-discovery (publish first)
             cam_id = str(payload.get("camera_id", "0"))
-            safe_id = f"secur_cam{cam_id}"
+            cam_name = payload.get("camera_name") or payload.get("camera") or f"cam{cam_id}"
+            safe_id = topic_slug(cam_name)
             auth = {"username": username, "password": password} if username and password else None
-            publish.single(f"secur/{safe_id}/alert_state", payload=json.dumps(payload), hostname=broker, port=port, retain=True, auth=auth)
-            publish.single(f"secur/{safe_id}/alert", payload=json.dumps(payload), hostname=broker, port=port, retain=True, auth=auth)
+            publish.single(f"tucuxi/camera/{safe_id}/alert_state", payload=json.dumps(payload), hostname=broker, port=port, retain=True, auth=auth)
+            publish.single(f"tucuxi/camera/{safe_id}/alert", payload=json.dumps(payload), hostname=broker, port=port, retain=True, auth=auth)
             if payload.get("event_type") in ("motion_detected", "object_detected", "snapshot_info"):
-                publish.single(f"secur/{safe_id}/state", payload="ON", hostname=broker, port=port, retain=True, auth=auth)
+                publish.single(f"tucuxi/camera/{safe_id}/state", payload="ON", hostname=broker, port=port, retain=True, auth=auth)
             elif payload.get("event_type") == "no_motion":
-                publish.single(f"secur/{safe_id}/state", payload="OFF", hostname=broker, port=port, retain=True, auth=auth)
+                publish.single(f"tucuxi/camera/{safe_id}/state", payload="OFF", hostname=broker, port=port, retain=True, auth=auth)
 
             # Main topic publish last so tests capturing the last call see the configured topic
             publish.single(
@@ -231,13 +233,14 @@ def mqtt_handler(payload: Dict):
                 client.publish(topic, json.dumps(payload), qos=0, retain=False)
                 # Per-camera state for HA auto-discovery
                 cam_id = str(payload.get("camera_id", "0"))
-                safe_id = f"secur_cam{cam_id}"
-                client.publish(f"secur/{safe_id}/alert_state", json.dumps(payload), qos=0, retain=False)
-                client.publish(f"secur/{safe_id}/alert", json.dumps(payload), qos=0, retain=False)
+                cam_name = payload.get("camera_name") or payload.get("camera") or f"cam{cam_id}"
+                safe_id = topic_slug(cam_name)
+                client.publish(f"tucuxi/camera/{safe_id}/alert_state", json.dumps(payload), qos=0, retain=False)
+                client.publish(f"tucuxi/camera/{safe_id}/alert", json.dumps(payload), qos=0, retain=False)
                 if payload.get("event_type") in ("motion_detected", "object_detected", "snapshot_info"):
-                    client.publish(f"secur/{safe_id}/state", "ON", qos=0, retain=True)
+                    client.publish(f"tucuxi/camera/{safe_id}/state", "ON", qos=0, retain=True)
                 elif payload.get("event_type") == "no_motion":
-                    client.publish(f"secur/{safe_id}/state", "OFF", qos=0, retain=True)
+                    client.publish(f"tucuxi/camera/{safe_id}/state", "OFF", qos=0, retain=True)
                 logger.info("MQTT alert published to topic=%s camera_id=%s", topic, payload.get("camera_id"))
         try:
             publish_enriched_event(to_enriched_event(payload))
@@ -272,7 +275,7 @@ def publish_enriched_event(enriched: Dict) -> None:
     if not broker:
         logger.debug("Enriched event skipped: MQTT_BROKER_URL not configured")
         return
-    topic = f"tucuxi/camera/{enriched.get('camera', 'unknown')}/event"
+    topic = f"tucuxi/camera/{topic_slug(enriched.get('camera', 'unknown'))}/event"
     publish.single(topic, json.dumps(enriched),
                    hostname=broker, port=port,
                    auth={"username": username, "password": password},
@@ -448,14 +451,14 @@ def mqtt_register_device(cameras):
         for camera in cameras:
             cam_id = str(camera["id"])
             cam_name = camera["name"]
-            safe_id = f"secur_cam{cam_id}"
+            safe_id = topic_slug(cam_name)
             zone = camera.get("zone") or "Geral"
 
             device = {
                 "identifiers": [safe_id],
-                "name": f"Secur - {cam_name}",
-                "model": "Secur Camera",
-                "manufacturer": "Secur",
+                "name": f"Tucuxi - {cam_name}",
+                "model": "Tucuxi Camera",
+                "manufacturer": "Tucuxi",
                 "sw_version": APP_VERSION,
                 "suggested_area": zone,
             }
@@ -463,7 +466,7 @@ def mqtt_register_device(cameras):
             # Motion binary_sensor (payloads padrão do HA: ON/OFF)
             motion_config = {
                 "name": f"{cam_name} Motion",
-                "state_topic": f"secur/{safe_id}/state",
+                "state_topic": f"tucuxi/camera/{safe_id}/state",
                 "payload_on": "ON",
                 "payload_off": "OFF",
                 "device_class": "motion",
@@ -480,9 +483,9 @@ def mqtt_register_device(cameras):
             # Alert sensor
             alert_config = {
                 "name": f"{cam_name} Alert",
-                "state_topic": f"secur/{safe_id}/alert_state",
+                "state_topic": f"tucuxi/camera/{safe_id}/alert_state",
                 "value_template": "{{ value_json.event_type }}",
-                "json_attributes_topic": f"secur/{safe_id}/alert",
+                "json_attributes_topic": f"tucuxi/camera/{safe_id}/alert",
                 "unique_id": f"{safe_id}_alert",
                 "device": device,
             }
@@ -496,7 +499,7 @@ def mqtt_register_device(cameras):
             # Snapshot camera entity
             snapshot_config = {
                 "name": f"{cam_name} Snapshot",
-                "state_topic": f"secur/{safe_id}/snapshot",
+                "state_topic": f"tucuxi/camera/{safe_id}/snapshot",
                 "unique_id": f"{safe_id}_snapshot",
                 "device": device,
             }
@@ -511,8 +514,8 @@ def mqtt_register_device(cameras):
             client.publish(f"homeassistant/binary_sensor/{safe_id}_alert/config", "", qos=1, retain=True)
 
             # Publish initial states so HA doesn't show "unknown"
-            client.publish(f"secur/{safe_id}/state", "OFF", qos=1, retain=True)
-            client.publish(f"secur/{safe_id}/alert_state",
+            client.publish(f"tucuxi/camera/{safe_id}/state", "OFF", qos=1, retain=True)
+            client.publish(f"tucuxi/camera/{safe_id}/alert_state",
                            json.dumps({"event_type": "none", "camera_id": cam_id}),
                            qos=1, retain=True)
 
@@ -569,10 +572,10 @@ def mqtt_register_predictor_entities(initial_alarm_mode: str = "armed_home"):
             name = slug.replace("_", " ").title()
             config = {
                 "name": f"Tucuxi {name} Predição",
-                "state_topic": f"tucuxi/predictions/{slug}",
+                "state_topic": f"tucuxi/camera/{slug}/prediction",
                 "value_template": "{{ value_json.probabilidade }}",
                 "unit_of_measurement": "%",
-                "json_attributes_topic": f"tucuxi/predictions/{slug}",
+                "json_attributes_topic": f"tucuxi/camera/{slug}/prediction",
                 "unique_id": f"tucuxi_{slug}_prediction",
                 "expire_after": 1800,
                 "device": device,
@@ -586,14 +589,14 @@ def mqtt_register_predictor_entities(initial_alarm_mode: str = "armed_home"):
             # Remove old predictor sensor config
             client.publish(f"homeassistant/sensor/tucuxi_{slug}_prediction/config", "", qos=1, retain=True)
             # Publish initial state so HA doesn't show "unknown"
-            client.publish(f"tucuxi/predictions/{slug}", json.dumps({"probabilidade": 0}), qos=1, retain=True)
+            client.publish(f"tucuxi/camera/{slug}/prediction", json.dumps({"probabilidade": 0}), qos=1, retain=True)
 
         # Alarm mode sensor (shows current mode: disarmed/armed_home/armed_away)
         alarm_config = {
             "name": "Tucuxi Alarme Mode",
-            "state_topic": "tucuxi/ha/alarm_mode",
+            "state_topic": "tucuxi/alarm/mode",
             "value_template": "{{ value_json.alarm_mode }}",
-            "json_attributes_topic": "tucuxi/ha/alarm_mode",
+            "json_attributes_topic": "tucuxi/alarm/mode",
             "unique_id": "tucuxi_alarm_mode",
             "icon": "mdi:shield-home",
             "device": device,
@@ -608,22 +611,22 @@ def mqtt_register_predictor_entities(initial_alarm_mode: str = "armed_home"):
         # Uses the restored mode (first boot: fail-secure armed_home).
         if initial_alarm_mode not in ("disarmed", "armed_home", "armed_away"):
             initial_alarm_mode = "armed_home"
-        client.publish("tucuxi/ha/alarm_mode", json.dumps({"alarm_mode": initial_alarm_mode}), qos=1, retain=True)
+        client.publish("tucuxi/alarm/mode", json.dumps({"alarm_mode": initial_alarm_mode}), qos=1, retain=True)
 
         # Switches
         switches = [
             {
                 "name": "Tucuxi Alarme",
                 "unique_id": "tucuxi_alarme",
-                "command_topic": "tucuxi/mode/alarme/set",
-                "state_topic": "tucuxi/mode/alarme/state",
+                "command_topic": "tucuxi/alarm/set",
+                "state_topic": "tucuxi/alarm/state",
                 "icon": "mdi:shield",
             },
             {
                 "name": "Tucuxi Viagem",
                 "unique_id": "tucuxi_viagem",
-                "command_topic": "tucuxi/mode/viagem/set",
-                "state_topic": "tucuxi/mode/viagem/state",
+                "command_topic": "tucuxi/alarm/viagem/set",
+                "state_topic": "tucuxi/alarm/viagem/state",
                 "icon": "mdi:airplane",
             },
         ]
