@@ -1505,11 +1505,19 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         tag = data.get("tag")
         if not tag:
             return jsonify({"error": "tag é obrigatório"}), 400
-        success, log = _update_manager.apply_update(tag)
+
+        def _run_update():
+            try:
+                _update_manager.apply_update(tag)
+            except Exception:
+                pass  # logging is inside apply_update
+
+        # Run in background so the request returns before service restarts
+        threading.Thread(target=_run_update, daemon=True).start()
         return jsonify({
-            "success": success,
-            "message": "Atualizado com sucesso" if success else "Falha ao atualizar",
-            "log": log,
-        }), 200 if success else 500
+            "success": True,
+            "message": "Atualização iniciada. O sistema irá reiniciar em breve.",
+            "log": [],
+        }), 202
 
     return app

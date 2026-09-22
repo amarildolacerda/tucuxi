@@ -91,15 +91,30 @@ async function applyUpdate() {
         });
         const data = await resp.json();
 
-        progressEl.style.display = "none";
-        resultEl.style.display = "block";
-
-        if (data.success) {
+        if (resp.status === 202) {
+            // Update started in background — show countdown then reload
+            progressEl.style.display = "none";
+            resultEl.style.display = "block";
             resultEl.innerHTML = `
-                <p style="color:var(--success);"><strong>Atualizado com sucesso! Reiniciando...</strong></p>
+                <p style="color:var(--success);"><strong>Atualização iniciada! Reiniciando em <span id="restart-countdown">15</span>s...</strong></p>
+                <p style="color:var(--muted-subtle);font-size:0.85rem;">Não desligue o Pi durante a atualização.</p>
             `;
-            setTimeout(() => location.reload(), 10000);
+            // Clear dismissed version so banner shows again after update
+            localStorage.removeItem('tucuxi_dismissed_update');
+            // Countdown then reload
+            let remaining = 15;
+            const timer = setInterval(() => {
+                remaining--;
+                const el = document.getElementById("restart-countdown");
+                if (el) el.textContent = remaining;
+                if (remaining <= 0) {
+                    clearInterval(timer);
+                    location.reload();
+                }
+            }, 1000);
         } else {
+            progressEl.style.display = "none";
+            resultEl.style.display = "block";
             resultEl.innerHTML = `
                 <p style="color:var(--error);"><strong>Falha ao atualizar</strong></p>
                 <pre style="background:var(--surface-2);padding:0.5rem;border-radius:var(--radius-sm);font-size:0.8rem;max-height:200px;overflow-y:auto;">${(data.log || []).join("\n")}</pre>

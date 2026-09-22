@@ -2219,7 +2219,7 @@ tr.event-info td {
 .update-banner {
     background: var(--warn);
     color: #000;
-    padding: 0.5rem 1rem;
+    padding: 0.5rem 2.5rem 0.5rem 1rem;
     text-align: center;
     font-size: 0.9rem;
     position: sticky;
@@ -2230,4 +2230,21 @@ tr.event-info td {
     color: #000;
     font-weight: bold;
     text-decoration: underline;
+}
+.banner-dismiss {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 1.3rem;
+    color: #000;
+    cursor: pointer;
+    opacity: 0.6;
+    line-height: 1;
+    padding: 0.2rem;
+}
+.banner-dismiss:hover {
+    opacity: 1;
 }

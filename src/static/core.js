@@ -110,13 +110,26 @@ async function bootDashboard() {
   await loadSection('overview'); // única seção carregada no boot
 
   // Check for updates and show banner
+  const DISMISSED_KEY = 'tucuxi_dismissed_update';
   fetch('/api/system/update-check')
     .then(r => r.ok ? r.json() : null)
     .then(data => {
       if (data && data.update_available) {
+        // Don't show if user already dismissed this version
+        const dismissed = localStorage.getItem(DISMISSED_KEY);
+        if (dismissed === data.latest_version) return;
+
         const banner = document.createElement('div');
         banner.className = 'update-banner';
-        banner.innerHTML = `Nova versão disponível: <strong>${data.latest_version}</strong> — <a href="/?section=settings">Atualizar</a>`;
+        banner.innerHTML = `
+          Nova versão disponível: <strong>${data.latest_version}</strong>
+          <a href="/?section=settings">Atualizar</a>
+          <button class="banner-dismiss" title="Pular esta versão">&times;</button>
+        `;
+        banner.querySelector('.banner-dismiss').addEventListener('click', () => {
+          localStorage.setItem(DISMISSED_KEY, data.latest_version);
+          banner.remove();
+        });
         document.body.prepend(banner);
       }
     })
