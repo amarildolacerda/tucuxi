@@ -476,7 +476,7 @@ class EventStorage:
                     thumb_map[eid] = row["thumb_id"]
         for event in events:
             tid = thumb_map.get(str(event["id"]))
-            event["thumbnail_url"] = f"/thumbnails/{tid}/image" if tid else None
+            event["thumbnail_url"] = f"/thumbnails/{tid}/image?t={tid}" if tid else None
         return events
 
     def add_camera(self, name: str, source: str, zone: str = None, alert_classes=None, exclusion_zones=None, mask_polygons=None):

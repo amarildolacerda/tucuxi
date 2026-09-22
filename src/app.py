@@ -525,7 +525,7 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
                 "id": it["id"],
                 "timestamp": it["timestamp"],
                 "event_type": it["event_type"],
-                "url": f"/thumbnails/{it['id']}/image",
+                "url": f"/thumbnails/{it['id']}/image?t={it['id']}",
                 "event_id": it.get("event_id"),
                 "level": it.get("event_level"),
                 "disposition": it.get("event_disposition"),
@@ -541,7 +541,10 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         path = item["path"]
         if not os.path.exists(path):
             return jsonify({"error": "Thumbnail não encontrado"}), 404
-        return send_file(path, mimetype="image/jpeg")
+        resp = send_file(path, mimetype="image/jpeg")
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        return resp
 
     @app.route("/camera/<int:camera_id>/clips")
     def camera_clips(camera_id):
