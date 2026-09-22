@@ -20,12 +20,16 @@ function _pickThumb(items, eventTs) {
 }
 function getCameraThumb(cameraId, eventTs) {
   if (!cameraId) return Promise.resolve(null);
-  const cached = thumbCache[cameraId];
+  // Use 'before' param to get thumbnails near the event's time, not the latest 20
+  const cacheKey = `${cameraId}_${eventTs || ''}`;
+  const cached = thumbCache[cacheKey];
   if (cached && (Date.now() - cached.ts) < THUMB_CACHE_TTL_MS) {
     return cached.promise.then(items => _pickThumb(items, eventTs));
   }
-  const promise = fetch(`/camera/${cameraId}/thumbnails`).then(r => r.ok ? r.json() : []).catch(() => []);
-  thumbCache[cameraId] = { ts: Date.now(), promise };
+  const params = new URLSearchParams({ limit: '10' });
+  if (eventTs) params.set('before', eventTs);
+  const promise = fetch(`/camera/${cameraId}/thumbnails?${params}`).then(r => r.ok ? r.json() : []).catch(() => []);
+  thumbCache[cacheKey] = { ts: Date.now(), promise };
   return promise.then(items => _pickThumb(items, eventTs));
 }
 

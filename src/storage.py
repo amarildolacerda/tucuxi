@@ -823,17 +823,23 @@ class EventStorage:
             self.connection.commit()
             return cursor.rowcount > 0
 
-    def list_camera_thumbnails(self, camera_id: int, limit: int = 20):
+    def list_camera_thumbnails(self, camera_id: int, limit: int = 20, before: str = None):
         with self.lock:
             cursor = self.connection.cursor()
-            cursor.execute(
+            sql = (
                 "SELECT t.id, t.timestamp, t.camera_id, t.event_type, t.path, t.event_id, "
                 "       e.level AS event_level, e.disposition AS event_disposition, e.dropped AS event_dropped "
                 "FROM camera_thumbnails t "
                 "LEFT JOIN events e ON e.id = t.event_id "
-                "WHERE t.camera_id = ? ORDER BY t.id DESC LIMIT ?",
-                (camera_id, limit),
+                "WHERE t.camera_id = ?"
             )
+            params = [camera_id]
+            if before:
+                sql += " AND t.timestamp < ?"
+                params.append(before)
+            sql += " ORDER BY t.id DESC LIMIT ?"
+            params.append(limit)
+            cursor.execute(sql, params)
             return [dict(row) for row in cursor.fetchall()]
 
     def prune_camera_thumbnails(self, camera_id: int, keep: int = 20, max_age_days: int = None):
@@ -842,7 +848,8 @@ class EventStorage:
             if max_age_days:
                 cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
                 cursor.execute(
-                    "SELECT id, path FROM camera_thumbnails WHERE camera_id = ? AND timestamp < ?",
+                    "SELECT id, path FROM camera_thumbnails "
+                    "WHERE camera_id = ? AND timestamp < ? AND event_id IS NULL",
                     (camera_id, cutoff),
                 )
                 for item in [dict(row) for row in cursor.fetchall()]:
@@ -851,8 +858,12 @@ class EventStorage:
                     except Exception:
                         logger.warning("Falha ao remover thumbnail %s", item["path"])
                     cursor.execute("DELETE FROM camera_thumbnails WHERE id = ?", (item["id"],))
+            # Apenas thumbnails sem event_id são candidatas a pruning por keep.
+            # Thumbnails vinculadas a eventos são preservadas — serão limpas pelo prune_events.
             cursor.execute(
-                "SELECT id, path FROM camera_thumbnails WHERE camera_id = ? ORDER BY id DESC LIMIT -1 OFFSET ?",
+                "SELECT id, path FROM camera_thumbnails "
+                "WHERE camera_id = ? AND event_id IS NULL "
+                "ORDER BY id DESC LIMIT -1 OFFSET ?",
                 (camera_id, keep),
             )
             excess = [dict(row) for row in cursor.fetchall()]

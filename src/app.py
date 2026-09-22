@@ -518,7 +518,9 @@ def create_app(camera_manager=None, db_path=None, alerts=None, event_bus=None):
         camera = storage.get_camera(camera_id)
         if not camera:
             return jsonify({"error": "Câmera não encontrada"}), 404
-        items = storage.list_camera_thumbnails(camera_id, limit=20)
+        before = request.args.get("before")
+        limit = min(int(request.args.get("limit", 20)), 100)
+        items = storage.list_camera_thumbnails(camera_id, limit=limit, before=before)
         out = []
         for it in items:
             out.append({
