@@ -106,7 +106,7 @@ O que está planejado — detalhes técnicos completos em [docs/roadmap.md](docs
 
 
 ## Instalação
-[curl -fsSL https://raw.githubusercontent.com/amarildolacerda/tucuxi/main/install.sh | sudo bash] install.sh
+[install.sh curl -fsSL https://raw.githubusercontent.com/amarildolacerda/tucuxi/main/install.sh | sudo bash]
 
 
 ## Licença
