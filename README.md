@@ -42,7 +42,17 @@ O tucuxi é o golfinho de rio amazônico que enxerga por ecolocalização: perce
 
 ## Como começar
 
-Guia completo de instalação e configuração em [docs/technical.md](docs/technical.md). O caminho rápido:
+Guia completo de instalação e configuração em [docs/technical.md](docs/technical.md).
+
+**Instalação em produção (Linux + systemd):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amarildolacerda/tucuxi/main/install.sh | sudo bash
+```
+
+O instalador clona o projeto em `/opt/tucuxi`, cria o serviço `tucuxi` (inicia no boot), sobe com Waitress na porta `8000` e te ajuda a criar o usuário admin.
+
+**Desenvolvimento local / Docker:**
 
 1. `docker compose up --build`
 2. Acesse `http://localhost:8000` e cadastre suas câmeras
@@ -103,11 +113,6 @@ O que está planejado — detalhes técnicos completos em [docs/roadmap.md](docs
 - [docs/branding.md](docs/branding.md) — sobre o nome comercial
 - [docs/research-user-wants.md](docs/research-user-wants.md) — pesquisa de desejos de usuários
 - [docs/research-monitoring-venues.md](docs/research-monitoring-venues.md) — monitoramentos desejáveis por ambiente
-
-
-## Instalação
-[install.sh curl -fsSL https://raw.githubusercontent.com/amarildolacerda/tucuxi/main/install.sh | sudo bash]
-
 
 ## Licença
 
