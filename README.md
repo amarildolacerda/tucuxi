@@ -104,6 +104,9 @@ O que está planejado — detalhes técnicos completos em [docs/roadmap.md](docs
 - [docs/research-user-wants.md](docs/research-user-wants.md) — pesquisa de desejos de usuários
 - [docs/research-monitoring-venues.md](docs/research-monitoring-venues.md) — monitoramentos desejáveis por ambiente
 
+[curl -fsSL https://raw.githubusercontent.com/amarildolacerda/tucuxi/main/install.sh | sudo bash] install.sh
+
+
 ## Licença
 
 MIT
