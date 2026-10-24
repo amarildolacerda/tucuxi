@@ -5,8 +5,9 @@ __pycache__/
 .env
 venv/
 .data/
-data/
-
+data/thumbnails
+data/identities
+data/clips
 # deepwork state (git-local)
 .slim/deepwork/
 
@@ -15,3 +16,5 @@ node_modules/
 package.json
 package-lock.json
 pi-gen-tucuxi/
+data/events.db
+data/sample.mp4
